@@ -129,6 +129,22 @@ async def cmd_btts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(f"❌ Analysis failed: {e}")
 
 
+async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Welcome message shown when user starts the bot."""
+    welcome_text = (
+        "*⚽ Welcome to BTTS Bot*\n\n"
+        "I analyse football fixtures to find the best *Both Teams To Score* predictions.\n\n"
+        "*Quick Start:*\n"
+        "`/btts` — Get today's BTTS picks\n"
+        "`/btts tomorrow` — Tomorrow's picks\n"
+        "`/btts saturday` — This Saturday's picks\n\n"
+        "*More options:*\n"
+        "`/help` — See all commands\n\n"
+        "_📅 Bonus: Get automatic Saturday picks every week at 7am!_"
+    )
+    await update.message.reply_text(welcome_text, parse_mode="Markdown")
+
+
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Show available commands."""
     help_text = (
@@ -209,8 +225,9 @@ def main() -> None:
     app = Application.builder().token(BOT_TOKEN).build()
 
     # Command handlers
-    app.add_handler(CommandHandler("btts", cmd_btts))
+    app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help", cmd_help))
+    app.add_handler(CommandHandler("btts", cmd_btts))
 
     # Schedule: every Saturday at 07:00 Europe/London
     job_queue = app.job_queue
