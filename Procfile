@@ -1,1 +1,0 @@
-worker: python btts_bot.py
