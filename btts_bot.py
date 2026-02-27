@@ -183,13 +183,28 @@ async def scheduled_btts(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 # ── Bot Setup ─────────────────────────────────────────────────────────────────
 
+import sys
+
 def main() -> None:
-    if not BOT_TOKEN:
-        print("ERROR: BTTS_BOT_TOKEN environment variable is not set.")
-        return
-    if not CHAT_ID:
-        print("ERROR: BTTS_CHAT_ID environment variable is not set.")
-        return
+    # Log the presence of required configuration. We intentionally *don't*
+    # print the secrets themselves so they are not exposed in logs, but we
+    # indicate whether they were supplied. Railway/other platforms will show
+    # these messages in their log tail which helps diagnose deployment crashes.
+    if BOT_TOKEN:
+        logger.info("BTTS_BOT_TOKEN is set")
+    else:
+        logger.error("BTTS_BOT_TOKEN environment variable is not set.")
+    if CHAT_ID:
+        logger.info("BTTS_CHAT_ID is set")
+    else:
+        logger.error("BTTS_CHAT_ID environment variable is not set.")
+
+    if not BOT_TOKEN or not CHAT_ID:
+        # Exit with a non-zero status so the process is marked as failed by the
+        # hosting provider. Returning quietly (exit code 0) makes a "crash"
+        # harder to diagnose on platforms like Railway that restart services on
+        # non-zero exits.
+        sys.exit(1)
 
     app = Application.builder().token(BOT_TOKEN).build()
 
