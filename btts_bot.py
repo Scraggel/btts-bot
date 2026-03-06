@@ -39,8 +39,9 @@ from btts_analysis import (
 BOT_TOKEN = os.getenv("BTTS_BOT_TOKEN", "")
 CHAT_ID   = os.getenv("BTTS_CHAT_ID",   "")
 
-# Scheduled send time every Saturday (24hr format, Europe/London timezone)
-SCHEDULED_HOUR   = 7
+# Scheduled send time for the automated job (24‑hr Europe/London timezone)
+# The job now runs every day at the configured hour/minute.
+SCHEDULED_HOUR   = 8
 SCHEDULED_MINUTE = 0
 
 # Retry settings for scheduled job if data source is unavailable
@@ -140,7 +141,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "`/btts saturday` — This Saturday's picks\n\n"
         "*More options:*\n"
         "`/help` — See all commands\n\n"
-        "_📅 Bonus: Get automatic Saturday picks every week at 7am!_"
+        "_📅 Bonus: Automatic picks sent daily at 08:00 London time!_"
     )
     await update.message.reply_text(welcome_text, parse_mode="Markdown")
 
@@ -154,18 +155,18 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "`/btts saturday` — Analyse coming Saturday\n"
         "`/btts YYYY-MM-DD` — Analyse a specific date\n"
         "`/help` — Show this message\n\n"
-        "_Scheduled: auto-delivery every Saturday at 7am_"
+        "_Scheduled: auto-delivery every day at 08:00 London time_"
     )
     await update.message.reply_text(help_text, parse_mode="Markdown")
 
 
 async def scheduled_btts(context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Automatically fired every Saturday morning by the job queue.
-    Analyses today's (Saturday) fixtures. Retries up to MAX_RETRIES
+    Automatically fired every morning by the job queue (daily at 08:00).
+    Analyses today's fixtures. Retries up to MAX_RETRIES
     times if the data source is unavailable.
     """
-    target = date.today()  # Will be Saturday when the scheduler fires
+    target = date.today()  # Runs daily; target is today's date when the scheduler fires
 
     for attempt in range(1, MAX_RETRIES + 1):
         logger.info(f"Running scheduled BTTS analysis for {target} (attempt {attempt}/{MAX_RETRIES})...")
@@ -229,19 +230,18 @@ def main() -> None:
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("btts", cmd_btts))
 
-    # Schedule: every Saturday at 07:00 Europe/London
+    # Schedule: daily run at configured hour/minute (Europe/London)
     job_queue = app.job_queue
     job_queue.run_daily(
         scheduled_btts,
         time=datetime.strptime(
             f"{SCHEDULED_HOUR:02d}:{SCHEDULED_MINUTE:02d}", "%H:%M"
         ).time(),
-        days=(5,),  # 5 = Saturday (Mon=0 … Sun=6)
-        name="saturday_btts",
+        name="daily_btts",
     )
 
     logger.info("BTTS Bot started. Listening for commands...")
-    logger.info(f"Scheduled: Saturday analysis at {SCHEDULED_HOUR:02d}:{SCHEDULED_MINUTE:02d}")
+    logger.info(f"Scheduled: daily analysis at {SCHEDULED_HOUR:02d}:{SCHEDULED_MINUTE:02d}")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 

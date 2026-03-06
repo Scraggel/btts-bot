@@ -17,7 +17,7 @@ A Telegram bot that analyzes football fixtures for "Both Teams To Score" predict
 - `/btts YYYY-MM-DD` — Analyze a specific date
 - `/help` — Show available commands
 
-The bot automatically sends analysis every Saturday at 7am.
+The bot automatically sends analysis every day at 08:00 London time.
 
 ## Local Development
 
