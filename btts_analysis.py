@@ -544,11 +544,14 @@ def format_terminal(results: list[dict], target_date: date = None) -> str:
     shortlist = [r for r in results if r["signal"] == "SHORTLIST"]
 
     def _render_picks(picks, tier_label):
-        if not picks:
-            return
+        # always show the tier header; if there are no picks, note that
         lines.append(f"\n{'─' * 66}")
         lines.append(f"  {tier_label}")
         lines.append(f"{'─' * 66}")
+
+        if not picks:
+            lines.append("  No matches fit that criteria")
+            return
 
         for i, r in enumerate(picks, 1):
             emoji = _signal_emoji(r["signal"])
@@ -593,11 +596,14 @@ def format_telegram(results: list[dict], target_date: date = None) -> str:
     blocks = [header]
 
     def _render_tier(picks, tier_header, tier_note=""):
-        if not picks:
-            return
+        # always render header, and show a note if there are no picks
         blocks.append(f"\n{'─' * 24}\n{tier_header}")
         if tier_note:
             blocks.append(f"_{tier_note}_")
+
+        if not picks:
+            blocks.append("_No matches fit that criteria._")
+            return
 
         for r in picks:
             odds_str = _format_odds(r["home_odds"], r["away_odds"])
