@@ -34,7 +34,7 @@ Signal system:
                         Backtested at 75-82% hit rate
   📋 STANDARD         — Both teams BTTS ≥5/7 in last 7 venue games
                         Backtested at ~61% hit rate (season-isolated).
-  📊 SHORTLIST        — All remaining fixtures ranked by confidence
+  📊 SHORTLIST        — Remaining games (highest‑rated by confidence)
 
 
 """
@@ -324,7 +324,7 @@ def classify_signal(h_btts_n: int, a_btts_n: int,
        Backtested: ~61% hit rate. Profitable above BTTS odds of ~1.64.
 
     📊 SHORTLIST:
-       Everything else ranked by confidence. Informational only.
+       Remaining fixtures sorted by confidence (highest‑rated). Informational only.
     """
     if (h_btts_n >= HIGH_CONVICTION_HOME_BTTS
             and a_btts_n >= HIGH_CONVICTION_AWAY_BTTS
@@ -570,7 +570,7 @@ def format_terminal(results: list[dict], target_date: date = None) -> str:
 
     _render_picks(high, "⭐ HIGH CONVICTION  (H ≥6/7 BTTS · A ≥5/7 BTTS · H odds ≥2.3)")
     _render_picks(standard, "📋 STANDARD  (Both ≥5/7 BTTS)")
-    _render_picks(shortlist, "📊 SHORTLIST")
+    _render_picks(shortlist, "📊 SHORTLIST  (remaining games, highest rated)")
 
     lines.append("\n" + "=" * 66)
     return "\n".join(lines)
@@ -629,6 +629,7 @@ def format_telegram(results: list[dict], target_date: date = None) -> str:
     _render_tier(
         shortlist,
         "📊 *SHORTLIST*",
+        "Remaining games (highest rated by confidence)",
     )
 
     # Scan summary and usage tips
