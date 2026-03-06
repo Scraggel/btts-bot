@@ -32,7 +32,7 @@ Scoring model (v2 — backtested across 3 seasons, season-isolated):
 Signal system:
   ⭐ HIGH CONVICTION  — Home BTTS ≥6/7 + Away BTTS ≥5/7 + Home odds ≥2.3
                         Backtested at 75-82% hit rate
-  📋 STANDARD         — Both teams BTTS ≥5/7 in last 7 venue games
+  📋 MEDIUM CONVICTION   — Both teams BTTS ≥5/7 in last 7 venue games
                         Backtested at ~61% hit rate (season-isolated).
   📊 SHORTLIST        — Remaining games (highest‑rated by confidence)
 
@@ -93,7 +93,7 @@ HIGH_CONVICTION_HOME_BTTS = 6  # Home BTTS in ≥6 of last 7 home games
 HIGH_CONVICTION_AWAY_BTTS = 5  # Away BTTS in ≥5 of last 7 away games
 HIGH_CONVICTION_HOME_ODDS = 2.3  # Home team odds ≥2.3 (not heavy favourite)
 
-STANDARD_BTTS = 5  # Both teams BTTS in ≥5 of last 7 venue games
+MEDIUM_BTTS = 5  # Both teams BTTS in ≥5 of last 7 venue games (medium-conviction tier)
 
 FIXTURES_URL = "https://www.football-data.co.uk/fixtures.csv"
 
@@ -319,7 +319,7 @@ def classify_signal(h_btts_n: int, a_btts_n: int,
        Backtested: 75–82% hit rate
        Break-even odds: ~1.22. Typical BTTS market: 1.70–1.90. Huge edge.
 
-    📋 STANDARD:
+    📋 MEDIUM CONVICTION:
        Both teams BTTS ≥5/7
        Backtested: ~61% hit rate. Profitable above BTTS odds of ~1.64.
 
@@ -332,9 +332,9 @@ def classify_signal(h_btts_n: int, a_btts_n: int,
             and home_odds >= HIGH_CONVICTION_HOME_ODDS):
         return "HIGH_CONVICTION"
 
-    if (h_btts_n >= STANDARD_BTTS
-            and a_btts_n >= STANDARD_BTTS):
-        return "STANDARD"
+    if (h_btts_n >= MEDIUM_BTTS
+            and a_btts_n >= MEDIUM_BTTS):
+        return "MEDIUM_CONVICTION"
 
     return "SHORTLIST"
 
@@ -496,7 +496,7 @@ def _signal_emoji(signal: str) -> str:
     """Return the emoji prefix for a signal tier."""
     return {
         "HIGH_CONVICTION": "⭐",
-        "STANDARD": "📋",
+        "MEDIUM_CONVICTION": "📋",
         "SHORTLIST": "📊",
     }.get(signal, "")
 
@@ -505,7 +505,7 @@ def _signal_label(signal: str) -> str:
     """Return the human-readable label for a signal tier."""
     return {
         "HIGH_CONVICTION": "HIGH CONVICTION",
-        "STANDARD": "STANDARD",
+        "MEDIUM_CONVICTION": "MEDIUM CONVICTION",
         "SHORTLIST": "SHORTLIST",
     }.get(signal, "")
 
@@ -540,7 +540,7 @@ def format_terminal(results: list[dict], target_date: date = None) -> str:
 
     # Group by signal tier for clear visual hierarchy
     high = [r for r in results if r["signal"] == "HIGH_CONVICTION"]
-    standard = [r for r in results if r["signal"] == "STANDARD"]
+    medium = [r for r in results if r["signal"] == "MEDIUM_CONVICTION"]
     shortlist = [r for r in results if r["signal"] == "SHORTLIST"]
 
     def _render_picks(picks, tier_label):
@@ -569,7 +569,7 @@ def format_terminal(results: list[dict], target_date: date = None) -> str:
             ])
 
     _render_picks(high, "⭐ HIGH CONVICTION  (H ≥6/7 BTTS · A ≥5/7 BTTS · H odds ≥2.3)")
-    _render_picks(standard, "📋 STANDARD  (Both ≥5/7 BTTS)")
+    _render_picks(medium, "📋 MEDIUM CONVICTION  (Both ≥5/7 BTTS)")
     _render_picks(shortlist, "📊 SHORTLIST  (remaining games, highest rated)")
 
     lines.append("\n" + "=" * 66)
@@ -586,11 +586,11 @@ def format_telegram(results: list[dict], target_date: date = None) -> str:
 
     day_label = f"{results[0]['day_name']} {results[0]['date']}"
 
-    header = f"*⚽ BTTS Picks — {day_label}*\n_LB{LOOKBACK_GAMES} · BTTS confidence · Season-isolated_"
+    header = f"*⚽ BTTS Picks — {day_label}*\n_LB{LOOKBACK_GAMES} · BTTS confidence_"
 
     # Group by signal tier
     high = [r for r in results if r["signal"] == "HIGH_CONVICTION"]
-    standard = [r for r in results if r["signal"] == "STANDARD"]
+    medium = [r for r in results if r["signal"] == "MEDIUM_CONVICTION"]
     shortlist = [r for r in results if r["signal"] == "SHORTLIST"]
 
     blocks = [header]
@@ -622,8 +622,8 @@ def format_telegram(results: list[dict], target_date: date = None) -> str:
         "H ≥6/7 BTTS · A ≥5/7 · H odds ≥2.3 · Backtest: 75%+",
     )
     _render_tier(
-        standard,
-        "📋 *STANDARD*",
+        medium,
+        "📋 *MEDIUM CONVICTION*",
         "Both ≥5/7 BTTS · Backtest: ~61%",
     )
     _render_tier(
