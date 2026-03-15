@@ -304,24 +304,42 @@ S3_PARAMS = {
     "MEX": {"lookback": 8, "weight": 0.90, "conf_min": 50, "home_odds_min": None, "over_odds_min": None},
 }
 
-# Minimum venue games before a team qualifies for S3 (min 5)
-S3_MIN_GAMES = 5
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # URL helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
-FIXTURES_URL = "https://www.football-data.co.uk/fixtures.csv"
+# European leagues — fixtures and results are in the main football-data files
+EU_FIXTURES_URL  = "https://www.football-data.co.uk/fixtures.csv"
+
+# Non-European leagues — completely separate fixtures file
+NON_EU_FIXTURES_URL = "https://www.football-data.co.uk/new_league_fixtures.csv"
+
+# The Div column in new_league_fixtures.csv uses country/league name strings,
+# not the short codes we use internally. This maps what the site puts in Div
+# to our internal code so we can match fixtures to history files.
+NON_EU_DIV_MAP = {
+    "Brazil":  "BRA",
+    "Mexico":  "MEX",
+    "Austria": "AUT",
+}
 
 def _history_url(code: str) -> str:
     if code in NON_EU:
+        # Non-EU results: football-data.co.uk/new/BRA.csv etc.
         return f"https://www.football-data.co.uk/new/{code}.csv"
+    # European results: football-data.co.uk/mmz4281/2526/E0.csv etc.
     return f"https://www.football-data.co.uk/mmz4281/{SEASON}/{code}.csv"
 
 
-HOME_ODDS_COLS = ["B365H", "PSH", "AvgH", "BWH", "IWH"]
-O25_ODDS_COLS  = ["B365>2.5", "P>2.5", "Avg>2.5", "BW>2.5", ">2.5"]
+# Home result odds — MaxH is best available across all tracked bookies
+HOME_ODDS_COLS = ["MaxH", "AvgH", "B365H", "PSH", "BWH", "IWH"]
+# O2.5 odds column priority — Max>2.5 gives the best available price across
+# all bookmakers tracked by football-data.co.uk. Avg>2.5 is the market average.
+# Individual bookies (B365, Pinnacle) used as fallback when Max/Avg not present.
+O25_ODDS_COLS  = ["Max>2.5", "Avg>2.5", "B365>2.5", "P>2.5", "BW>2.5", ">2.5"]
 
 TELEGRAM_MAX_LENGTH = 4096
 
@@ -335,13 +353,52 @@ DAY_NAMES = {
 # Data fetching
 # ─────────────────────────────────────────────────────────────────────────────
 
-def download_fixtures() -> pd.DataFrame:
-    """Download master fixtures CSV (all leagues, upcoming games)."""
-    resp = requests.get(FIXTURES_URL, timeout=15)
+def _fetch_csv(url: str) -> pd.DataFrame:
+    """Fetch a CSV from a URL and return a cleaned DataFrame."""
+    resp = requests.get(url, timeout=15)
     resp.raise_for_status()
     df = pd.read_csv(StringIO(resp.content.decode("utf-8-sig")))
     df.columns = df.columns.str.strip()
-    df = df.dropna(subset=["HomeTeam", "AwayTeam", "Div"])
+    return df
+
+
+def download_fixtures() -> pd.DataFrame:
+    """
+    Download upcoming fixtures from both sources and combine into one DataFrame.
+
+    European leagues:     football-data.co.uk/fixtures.csv
+    Non-European leagues: football-data.co.uk/new_league_fixtures.csv
+
+    The non-EU file uses country/league names in the Div column (e.g. 'Brazil')
+    rather than short codes. These are remapped to our internal codes via
+    NON_EU_DIV_MAP before merging, so all downstream code sees consistent Div values.
+    """
+    frames = []
+
+    # European fixtures
+    try:
+        eu = _fetch_csv(EU_FIXTURES_URL)
+        eu = eu.dropna(subset=["HomeTeam", "AwayTeam", "Div"])
+        frames.append(eu)
+    except Exception as e:
+        print(f"  -> WARNING: EU fixtures fetch failed ({e})")
+
+    # Non-European fixtures
+    try:
+        non_eu = _fetch_csv(NON_EU_FIXTURES_URL)
+        non_eu = non_eu.dropna(subset=["HomeTeam", "AwayTeam", "Div"])
+        # Remap Div values from country names to internal codes
+        non_eu["Div"] = non_eu["Div"].map(NON_EU_DIV_MAP)
+        # Drop rows where Div didn't map (leagues we don't cover)
+        non_eu = non_eu.dropna(subset=["Div"])
+        frames.append(non_eu)
+    except Exception as e:
+        print(f"  -> WARNING: Non-EU fixtures fetch failed ({e})")
+
+    if not frames:
+        return pd.DataFrame()
+
+    df = pd.concat(frames, ignore_index=True)
     df["Date"] = pd.to_datetime(df["Date"], dayfirst=True, errors="coerce")
     df = df.dropna(subset=["Date"])
     if "Time" not in df.columns:
@@ -440,8 +497,12 @@ def _last_n_away(df: pd.DataFrame, team: str, before: date, n: int) -> pd.DataFr
 
 
 def _min_req(n: int) -> int:
-    """Minimum games we need before computing a metric — half lookback, min 3."""
-    return max(n // 2, 3)
+    """
+    Minimum games required before computing a metric.
+    Full lookback is required — if a team hasn't played enough venue games
+    this season the signal is not triggered. No partial history fallback.
+    """
+    return n
 
 
 def _avg_home_conceded(df, team, before, n):
@@ -775,11 +836,9 @@ def check_signal3(df: pd.DataFrame, home: str, away: str,
 
     Confidence formula — pure BTTS product:
       confidence = home_btts_pct × away_btts_pct × 100
-      (home_btts_pct = fraction of last N home games where both teams scored)
-      (away_btts_pct = fraction of last N away games where both teams scored)
 
-    The BTTS_weight column in S3_PARAMS is retained in the parameter table
-    for reference but is NOT used in the formula — confidence is pure product.
+    Full lookback required — if either team hasn't played enough venue games
+    this season the signal returns False. No partial history fallback.
 
     Returns True if the fixture qualifies as S3, False otherwise.
     """
@@ -788,7 +847,8 @@ def check_signal3(df: pd.DataFrame, home: str, away: str,
         return False  # League not in S3 parameters — skip
 
     lb   = p["lookback"]
-    minr = max(lb // 2, S3_MIN_GAMES)
+    # Full lookback required — skip if team doesn't have enough games this season
+    minr = lb
 
     # ── Home BTTS rate in last N home games ───────────────────────────────────
     h_games = _last_n_home(df, home, fixture_date, lb)
