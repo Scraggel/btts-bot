@@ -127,12 +127,7 @@ SIGNAL_PARAMS = {
     # Row 3:  E0  S2-Strong_Away Volume     LB7  away_scored=1.5  away_overs=50%
     #             home_concedes=1.25  odds_floor=1.75
     "E0": {
-        "s1": {
-            "tier": "Selective", "lookback": 6,
-            "home_concedes": 1.25, "home_overs": 0.625, "away_overs": 0.625,
-            "home_total": 3.0, "home_leaky": 0.35, "away_scored": 1.2,
-            "odds_floor": 1.75,   # matches S2 floor for E0
-        },
+        "s1": None,
         "s2": {
             "tier": "Volume", "lookback": 7,
             "away_scored": 1.5, "away_overs": 0.50, "home_concedes": 1.25,
@@ -156,7 +151,7 @@ SIGNAL_PARAMS = {
         "s2": {
             "tier": "Balanced", "lookback": 6,
             "away_scored": 1.0, "away_overs": 0.75, "home_concedes": 1.25,
-            "odds_floor": 1.85,
+            "odds_floor": 1.80,
         },
     },
 
@@ -168,7 +163,7 @@ SIGNAL_PARAMS = {
         "s2": {
             "tier": "Selective", "lookback": 6,
             "away_scored": 1.5, "away_overs": 0.75, "home_concedes": 1.25,
-            "odds_floor": 1.85,
+            "odds_floor": 1.80,
         },
     },
 
@@ -192,7 +187,7 @@ SIGNAL_PARAMS = {
         "s2": {
             "tier": "Selective", "lookback": 8,
             "away_scored": 1.25, "away_overs": 0.50, "home_concedes": 1.25,
-            "odds_floor": 1.75,
+            "odds_floor": 1.70,
         },
     },
 
@@ -285,23 +280,23 @@ S1_MIN_FLAGS = 3
 
 S3_PARAMS = {
     # E0  BTTS  Balanced  LB5  weight=0.8  conf=50%  home_odds=2.3  over_odds=1.75
-    "E0": {"lookback": 5,  "weight": 0.80, "conf_min": 50, "home_odds_min": 2.3,  "over_odds_min": 1.75},
+    "E0": {"lookback": 5,  "weight": 0.80, "conf_min": 50, "home_odds_min": 2.1,  "over_odds_min": 1.80},
     # E1  BTTS  Balanced  LB8  weight=0.9  conf=50%  home_odds=2.5  over_odds=1.85
-    "E1": {"lookback": 8,  "weight": 0.90, "conf_min": 50, "home_odds_min": 2.5,  "over_odds_min": 1.85},
+    "E1": {"lookback": 8,  "weight": 0.90, "conf_min": 50, "home_odds_min": 2.1,  "over_odds_min": 1.80},
     # E2  BTTS  Selective  LB5  weight=0.8  conf=50%  home_odds=2.3  over_odds=1.75
-    "E2": {"lookback": 5,  "weight": 0.80, "conf_min": 50, "home_odds_min": 2.3,  "over_odds_min": 1.75},
+    "E2": {"lookback": 5,  "weight": 0.80, "conf_min": 50, "home_odds_min": 2.1,  "over_odds_min": 1.80},
     # E3  BTTS  Volume  LB8  weight=0.9  conf=45%  home_odds=Any  over_odds=1.80
-    "E3": {"lookback": 8,  "weight": 0.90, "conf_min": 45, "home_odds_min": None, "over_odds_min": 1.80},
+    "E3": {"lookback": 8,  "weight": 0.90, "conf_min": 45, "home_odds_min": 1.7, "over_odds_min": 1.80},
     # D1  BTTS  Volume  LB6  weight=0.8  conf=55%  home_odds=Any  over_odds=All
-    "D1": {"lookback": 6,  "weight": 0.80, "conf_min": 55, "home_odds_min": None, "over_odds_min": None},
+    "D1": {"lookback": 6,  "weight": 0.80, "conf_min": 55, "home_odds_min": 1.7, "over_odds_min": 1.75},
     # F2  BTTS  Selective  LB8  weight=0.9  conf=40%  home_odds=2.5  over_odds=1.85
-    "F2": {"lookback": 8,  "weight": 0.90, "conf_min": 40, "home_odds_min": 2.5,  "over_odds_min": 1.85},
+    "F2": {"lookback": 8,  "weight": 0.90, "conf_min": 40, "home_odds_min": 2.3,  "over_odds_min": 1.85},
     # N1  BTTS  Volume  LB7  weight=0.7  conf=40%  home_odds=Any  over_odds=1.85
-    "N1": {"lookback": 7,  "weight": 0.70, "conf_min": 40, "home_odds_min": None, "over_odds_min": 1.85},
+    "N1": {"lookback": 7,  "weight": 0.70, "conf_min": 40, "home_odds_min": 1.7, "over_odds_min": 1.85},
     # BRA  BTTS  Selective  LB8  weight=0.7  conf=55%  home_odds=Any  over_odds=None (non-EU)
-    "BRA": {"lookback": 8, "weight": 0.70, "conf_min": 55, "home_odds_min": None, "over_odds_min": None},
+    "BRA": {"lookback": 8, "weight": 0.70, "conf_min": 55, "home_odds_min": 1.7, "over_odds_min": None},
     # MEX  BTTS  Selective  LB8  weight=0.9  conf=50%  home_odds=Any  over_odds=None (non-EU)
-    "MEX": {"lookback": 8, "weight": 0.90, "conf_min": 50, "home_odds_min": None, "over_odds_min": None},
+    "MEX": {"lookback": 8, "weight": 0.90, "conf_min": 50, "home_odds_min": 1.7, "over_odds_min": None},
 }
 
 
