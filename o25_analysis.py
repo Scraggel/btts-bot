@@ -18,12 +18,12 @@ parameters derived from a 3-season backtest.
       - Home team avg goals conceded at home >= threshold
     Plus odds floor where applicable.
 
-  Signal 3 (S3) — BTTS corroboration (self-contained, per-league parameters)
-    Confidence = (weight × BTTS_product) + ((1-weight) × Scoring_product)
-    Per-league: lookback, weight, confidence minimum, home odds minimum,
-                over odds minimum. All parameters independent of btts_analysis.py.
-    When S3 triggers on a fixture that also has S1 or S2, it corroborates
-    the O2.5 pick — both teams likely to score implies 3+ goals.
+  Signal 3 (S3) — BTTS Form (first-class signal, per-league parameters)
+    Confidence = home_btts_pct (last N home games) x away_btts_pct (last N away games) x 100
+    Three gates: confidence >= conf_min  AND  home_odds >= home_odds_min
+                 AND  o25_odds >= o25_floor (aligned to S2 floor; skipped for non-EU)
+    Fires standalone when S1/S2 do not trigger; also shown as a corroboration
+    tag (S1)(S3) or (S2)(S3) when S3 qualifies on the same fixture.
 
 Leagues:
   European (odds in dataset):
@@ -129,8 +129,8 @@ SIGNAL_PARAMS = {
     "E0": {
         "s1": None,
         "s2": {
-            "tier": "Volume", "lookback": 7,
-            "away_scored": 1.5, "away_overs": 0.50, "home_concedes": 1.25,
+            "tier": "Balanced", "lookback": 7,
+            "away_scored": 1.0, "away_overs": 0.75, "home_concedes": 1.25,
             "odds_floor": 1.75,
         },
     },
@@ -161,8 +161,8 @@ SIGNAL_PARAMS = {
     "E3": {
         "s1": None,
         "s2": {
-            "tier": "Selective", "lookback": 6,
-            "away_scored": 1.5, "away_overs": 0.75, "home_concedes": 1.25,
+            "tier": "Balanced", "lookback": 6,
+            "away_scored": 1.0, "away_overs": 0.75, "home_concedes": 1.25,
             "odds_floor": 1.80,
         },
     },
@@ -185,7 +185,7 @@ SIGNAL_PARAMS = {
     "D2": {
         "s1": None,
         "s2": {
-            "tier": "Selective", "lookback": 8,
+            "tier": "Selective", "lookback": 7,
             "away_scored": 1.25, "away_overs": 0.50, "home_concedes": 1.25,
             "odds_floor": 1.70,
         },
@@ -197,7 +197,7 @@ SIGNAL_PARAMS = {
     "F1": {
         "s1": None,
         "s2": {
-            "tier": "Selective", "lookback": 8,
+            "tier": "Selective", "lookback": 7,
             "away_scored": 1.5, "away_overs": 0.50, "home_concedes": 1.25,
             "odds_floor": 1.85,
         },
@@ -217,13 +217,13 @@ SIGNAL_PARAMS = {
     #             home_concedes=1.0  odds_floor=1.85
     "N1": {
         "s1": {
-            "tier": "Balanced", "lookback": 8,
+            "tier": "Balanced", "lookback": 7,
             "home_concedes": 0.75, "home_overs": 0.625, "away_overs": 0.625,
             "home_total": 2.5, "home_leaky": 0.35, "away_scored": 1.2,
             "odds_floor": 1.85,   # matches S2 floor for N1
         },
         "s2": {
-            "tier": "Selective", "lookback": 8,
+            "tier": "Selective", "lookback": 7,
             "away_scored": 1.25, "away_overs": 0.50, "home_concedes": 1.0,
             "odds_floor": 1.85,
         },
@@ -235,7 +235,7 @@ SIGNAL_PARAMS = {
     "BRA": {
         "s1": None,
         "s2": {
-            "tier": "Selective", "lookback": 8,
+            "tier": "Selective", "lookback": 7,
             "away_scored": 1.0, "away_overs": 0.75, "home_concedes": 1.0,
             "odds_floor": None, "breakeven": 1.29,
         },
@@ -254,7 +254,7 @@ SIGNAL_PARAMS = {
     "AUT": {
         "s1": None,
         "s2": {
-            "tier": "Selective", "lookback": 8,
+            "tier": "Selective", "lookback": 7,
             "away_scored": 1.5, "away_overs": 0.75, "home_concedes": 1.0,
             "odds_floor": None, "breakeven": 1.57,
         },
@@ -265,38 +265,39 @@ SIGNAL_PARAMS = {
 S1_MIN_FLAGS = 3
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Signal 3 (S3) — BTTS corroboration parameters
-# Transcribed from SIGNALS_PARAMETERS.csv (BTTS rows)
+# Signal 3 (S3) — BTTS form parameters
+#
+# S3 qualifies on three gates:
+#   1. confidence = home_btts_pct (last N home games) x away_btts_pct (last N away games) x 100
+#      must reach conf_min
+#   2. home_odds >= home_odds_min  (filters out heavy favourites)
+#   3. o25_odds >= o25_floor       (aligned to S2 odds floor for the same league;
+#                                   None = non-EU league, no odds in data — skip check)
+#
+# o25_floor source per league:
+#   E0 1.75  E1 1.75 (no S2 — aligned to E0)  E2 1.80  E3 1.80
+#   D1 1.65  F2 1.85 (no S2 — aligned to F1)  N1 1.85
+#   BRA None (non-EU)  MEX None (non-EU)
 #
 # Fields:
-#   lookback      - venue-specific games lookback
-#   weight        - BTTS score weight in confidence formula
-#   conf_min      - minimum confidence % to qualify (0-100)
+#   lookback      - venue-specific games lookback (full window required)
+#   conf_min      - minimum confidence % to qualify
 #   home_odds_min - minimum home match result odds; None = no filter
-#   over_odds_min - minimum O2.5 market odds; None = no filter / non-EU
+#   o25_floor     - minimum O2.5 odds; None = non-EU, no odds in data
 #
-# Leagues not in this dict have no BTTS row in the CSV and are skipped for S3.
+# Leagues not in this dict have no S3 parameters and are skipped.
 # ─────────────────────────────────────────────────────────────────────────────
 
 S3_PARAMS = {
-    # E0  BTTS  Balanced  LB5  weight=0.8  conf=50%  home_odds=2.3  over_odds=1.75
-    "E0": {"lookback": 5,  "weight": 0.80, "conf_min": 50, "home_odds_min": 2.1,  "over_odds_min": 1.80},
-    # E1  BTTS  Balanced  LB8  weight=0.9  conf=50%  home_odds=2.5  over_odds=1.85
-    "E1": {"lookback": 8,  "weight": 0.90, "conf_min": 50, "home_odds_min": 2.1,  "over_odds_min": 1.80},
-    # E2  BTTS  Selective  LB5  weight=0.8  conf=50%  home_odds=2.3  over_odds=1.75
-    "E2": {"lookback": 5,  "weight": 0.80, "conf_min": 50, "home_odds_min": 2.1,  "over_odds_min": 1.80},
-    # E3  BTTS  Volume  LB8  weight=0.9  conf=45%  home_odds=Any  over_odds=1.80
-    "E3": {"lookback": 8,  "weight": 0.90, "conf_min": 45, "home_odds_min": 1.7, "over_odds_min": 1.80},
-    # D1  BTTS  Volume  LB6  weight=0.8  conf=55%  home_odds=Any  over_odds=All
-    "D1": {"lookback": 6,  "weight": 0.80, "conf_min": 55, "home_odds_min": 1.7, "over_odds_min": 1.75},
-    # F2  BTTS  Selective  LB8  weight=0.9  conf=40%  home_odds=2.5  over_odds=1.85
-    "F2": {"lookback": 8,  "weight": 0.90, "conf_min": 40, "home_odds_min": 2.3,  "over_odds_min": 1.85},
-    # N1  BTTS  Volume  LB7  weight=0.7  conf=40%  home_odds=Any  over_odds=1.85
-    "N1": {"lookback": 7,  "weight": 0.70, "conf_min": 40, "home_odds_min": 1.7, "over_odds_min": 1.85},
-    # BRA  BTTS  Selective  LB8  weight=0.7  conf=55%  home_odds=Any  over_odds=None (non-EU)
-    "BRA": {"lookback": 8, "weight": 0.70, "conf_min": 55, "home_odds_min": 1.7, "over_odds_min": None},
-    # MEX  BTTS  Selective  LB8  weight=0.9  conf=50%  home_odds=Any  over_odds=None (non-EU)
-    "MEX": {"lookback": 8, "weight": 0.90, "conf_min": 50, "home_odds_min": 1.7, "over_odds_min": None},
+    "E0":  {"lookback": 6,  "conf_min": 50, "home_odds_min": 2.1, "o25_floor": 1.75},
+    "E1":  {"lookback": 7,  "conf_min": 50, "home_odds_min": 2.1, "o25_floor": 1.80},  # no S2 — aligned to E0
+    "E2":  {"lookback": 7,  "conf_min": 50, "home_odds_min": 2.1, "o25_floor": 1.80},
+    "E3":  {"lookback": 7,  "conf_min": 45, "home_odds_min": 1.7, "o25_floor": 1.80},
+    "D1":  {"lookback": 6,  "conf_min": 55, "home_odds_min": 1.7, "o25_floor": 1.65},
+    "F2":  {"lookback": 6,  "conf_min": 45, "home_odds_min": 2.3, "o25_floor": 1.85},  # no S2 — aligned to F1
+    "N1":  {"lookback": 7,  "conf_min": 45, "home_odds_min": 1.7, "o25_floor": 1.85},
+    "BRA": {"lookback": 8,  "conf_min": 55, "home_odds_min": 1.7, "o25_floor": None},  # non-EU
+    "MEX": {"lookback": 8,  "conf_min": 50, "home_odds_min": 1.7, "o25_floor": None},  # non-EU
 }
 
 
@@ -736,12 +737,15 @@ def run_analysis(target_date: date = None,
 
     print(f"  -> {len(day_fixtures)} fixtures · {window_label}")
 
-    # Load history for each league that has S1 or S2 configured
+    # Load history for each league that has S1, S2, or S3 configured.
+    # S3-only leagues (e.g. E1, F2, MEX) are included so standalone S3
+    # picks can be evaluated even when S1/S2 are not active for that league.
     leagues_needed = [
         c for c in day_fixtures["Div"].unique()
         if c in LEAGUE_META
         and (SIGNAL_PARAMS.get(c, {}).get("s1") is not None
-             or SIGNAL_PARAMS.get(c, {}).get("s2") is not None)
+             or SIGNAL_PARAMS.get(c, {}).get("s2") is not None
+             or c in S3_PARAMS)
     ]
     history = {}
     for code in leagues_needed:
@@ -772,6 +776,11 @@ def run_analysis(target_date: date = None,
         o25_odds  = _extract_odds(row, O25_ODDS_COLS)
         home_odds = _extract_odds(row, HOME_ODDS_COLS)
 
+        # ── S1 / S2 ──────────────────────────────────────────────────────────
+        # Track which fixtures already have an S1/S2 result so S3 can mark
+        # itself as corroborating rather than standalone on the same fixture.
+        s12_fixture_keys = set()
+
         for check_fn in (check_signal1, check_signal2):
             sig = check_fn(df, home, away, fdate, code)
             if sig is None:
@@ -782,33 +791,68 @@ def run_analysis(target_date: date = None,
                 skipped_odds += 1
                 continue
 
-            # S3 evaluated here — self-contained, no external dependency
-            s3 = check_signal3(df, home, away, fdate, code, home_odds, o25_odds)
+            # S3 evaluated alongside S1/S2 to determine corroboration flag.
+            # check_signal3 now returns a dict (or None) — truthy test unchanged.
+            s3_result = check_signal3(df, home, away, fdate, code, home_odds, o25_odds)
+            s12_fixture_keys.add((home, away, fdate))
 
             results.append({
-                "code":      code,
-                "league":    league,
-                "date":      fdate.strftime("%d %b %Y"),
-                "day_name":  DAY_NAMES[fdate.weekday()],
-                "kickoff":   kickoff,
-                "home":      home,
-                "away":      away,
-                "home_odds": home_odds,
-                "o25_odds":  o25_odds,
-                "odds_note": odds_note,
-                "is_non_eu": code in NON_EU,
-                "s3":        s3,
+                "code":        code,
+                "league":      league,
+                "date":        fdate.strftime("%d %b %Y"),
+                "day_name":    DAY_NAMES[fdate.weekday()],
+                "kickoff":     kickoff,
+                "home":        home,
+                "away":        away,
+                "home_odds":   home_odds,
+                "o25_odds":    o25_odds,
+                "odds_note":   odds_note,
+                "is_non_eu":   code in NON_EU,
+                "s3":          s3_result is not None,   # corroboration flag
                 **sig,
             })
+
+        # ── S3 standalone ────────────────────────────────────────────────────
+        # Only add a standalone S3 pick if this fixture was NOT already
+        # captured by S1 or S2 above.  S3-only leagues (e.g. E1, F2, MEX)
+        # have no S1/S2 config so they will always reach this branch.
+        fixture_key = (home, away, fdate)
+        if fixture_key not in s12_fixture_keys:
+            s3_result = check_signal3(df, home, away, fdate, code, home_odds, o25_odds)
+            if s3_result is not None:
+                floor = s3_result.get("o25_floor")
+                if code in NON_EU:
+                    odds_note = "No odds data · verify manually"
+                elif o25_odds is not None:
+                    odds_note = f"O2.5 {o25_odds:.2f}" + (f" (floor: {floor:.2f})" if floor else "")
+                else:
+                    odds_note = f"O2.5 not in data" + (f" (floor: {floor:.2f})" if floor else "")
+
+                results.append({
+                    "code":        code,
+                    "league":      league,
+                    "date":        fdate.strftime("%d %b %Y"),
+                    "day_name":    DAY_NAMES[fdate.weekday()],
+                    "kickoff":     kickoff,
+                    "home":        home,
+                    "away":        away,
+                    "home_odds":   home_odds,
+                    "o25_odds":    o25_odds,
+                    "odds_note":   odds_note,
+                    "is_non_eu":   code in NON_EU,
+                    "s3":          False,   # this IS the S3 pick — no separate corroboration flag
+                    **s3_result,
+                })
 
     if skipped_odds:
         print(f"  -> {skipped_odds} picks excluded (odds below floor)")
     print(f"  -> Complete. {len(results)} qualifying picks.")
 
-    # Sort: S1 before S2, Selective before Balanced/Volume, then kickoff
+    # Sort: S1 before S2 before S3, Selective before Balanced/Volume, then kickoff
     tier_order = {"Selective": 0, "Balanced": 1, "Volume": 2}
+    sig_order  = {"S1": 0, "S2": 1, "S3": 2}
     results.sort(key=lambda x: (
-        0 if x["signal"] == "S1" else 1,
+        sig_order.get(x["signal"], 9),
         tier_order.get(x["tier"], 9),
         x["kickoff"],
     ))
@@ -822,58 +866,67 @@ def run_analysis(target_date: date = None,
 def check_signal3(df: pd.DataFrame, home: str, away: str,
                   fixture_date: date, code: str,
                   home_odds: float | None,
-                  o25_odds: float | None) -> bool:
+                  o25_odds: float | None) -> dict | None:
     """
-    Evaluate Signal 3 (BTTS corroboration) for a fixture.
+    Evaluate Signal 3 (BTTS form) for a fixture.
 
-    Uses per-league parameters from S3_PARAMS — completely independent
-    of btts_analysis.py which only covers UK leagues with fixed thresholds.
+    S3 is a first-class signal — it fires in its own right when BTTS form
+    criteria are met, and also corroborates S1/S2 picks on the same fixture.
 
-    Confidence formula — pure BTTS product:
-      confidence = home_btts_pct × away_btts_pct × 100
+    Three gates must all pass:
+      1. confidence = home_btts_pct x away_btts_pct x 100  >=  conf_min
+      2. home_odds >= home_odds_min  (filters heavy favourites)
+      3. o25_odds >= o25_floor       (aligned to S2 floor for same league;
+                                      skipped for non-EU leagues where no odds are available)
 
-    Full lookback required — if either team hasn't played enough venue games
-    this season the signal returns False. No partial history fallback.
+    Full lookback required — if either team hasn't played enough home/away
+    games this season the signal returns None. No partial history fallback.
 
-    Returns True if the fixture qualifies as S3, False otherwise.
+    Returns a result dict if the fixture qualifies, None otherwise.
     """
     p = S3_PARAMS.get(code)
     if p is None:
-        return False  # League not in S3 parameters — skip
+        return None  # League not in S3 parameters — skip
 
-    lb   = p["lookback"]
-    # Full lookback required — skip if team doesn't have enough games this season
-    minr = lb
+    lb = p["lookback"]
 
     # ── Home BTTS rate in last N home games ───────────────────────────────────
     h_games = _last_n_home(df, home, fixture_date, lb)
-    if len(h_games) < minr:
-        return False
+    if len(h_games) < lb:
+        return None
     h_btts_pct = ((h_games["FTHG"] > 0) & (h_games["FTAG"] > 0)).mean()
 
     # ── Away BTTS rate in last N away games ───────────────────────────────────
     a_games = _last_n_away(df, away, fixture_date, lb)
-    if len(a_games) < minr:
-        return False
+    if len(a_games) < lb:
+        return None
     a_btts_pct = ((a_games["FTHG"] > 0) & (a_games["FTAG"] > 0)).mean()
 
-    # ── Confidence — pure BTTS product ────────────────────────────────────────
+    # ── Gate 1: confidence threshold ──────────────────────────────────────────
     confidence = h_btts_pct * a_btts_pct * 100
-
     if confidence < p["conf_min"]:
-        return False
+        return None
 
-    # ── Home odds filter (None = no filter for leagues with 'Any') ────────────
+    # ── Gate 2: home odds filter ───────────────────────────────────────────────
     if p["home_odds_min"] is not None:
         if home_odds is None or home_odds < p["home_odds_min"]:
-            return False
+            return None
 
-    # ── Over odds filter (None = no filter for non-EU leagues) ────────────────
-    if p["over_odds_min"] is not None and code not in NON_EU:
-        if o25_odds is not None and o25_odds < p["over_odds_min"]:
-            return False
+    # ── Gate 3: O2.5 odds floor (aligned to S2 floor for this league) ─────────
+    # Non-EU leagues have o25_floor=None — no odds in data, skip check.
+    o25_floor = p["o25_floor"]
+    if o25_floor is not None:
+        if o25_odds is not None and o25_odds < o25_floor:
+            return None
 
-    return True
+    return {
+        "signal":     "S3",
+        "tier":       "Selective",
+        "h_btts_pct": round(h_btts_pct * 100, 1),
+        "a_btts_pct": round(a_btts_pct * 100, 1),
+        "confidence": round(confidence, 1),
+        "o25_floor":  o25_floor,
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -885,7 +938,11 @@ def format_telegram(results: list[dict],
                     use_24h_window: bool = False) -> str:
     """
     Format O2.5 results as a Telegram message.
-    S3 is read directly from each result dict (evaluated in run_analysis).
+
+    S3 can appear in two ways:
+      - As a standalone pick (signal == 'S3') when only BTTS form triggered.
+      - As a corroboration tag (s3 == True) on an S1 or S2 pick where S3
+        also triggered on the same fixture.
     """
 
     # Empty result message
@@ -913,9 +970,9 @@ def format_telegram(results: list[dict],
     def _tags(r: dict) -> str:
         """
         Build signal tag string.
-        (S3) means BTTS form is strong on this fixture — both teams are
-        likely to score, which corroborates the O2.5 signal. Higher confidence
-        in the overs pick. Not a separate bet suggestion.
+        (S3) appended to an S1/S2 tag means BTTS form also qualifies on this
+        fixture — both signals point at the same game, adding conviction.
+        A standalone (S3) tag means only BTTS form triggered.
         """
         t = f"({r['signal']})"
         if r.get("s3"):
@@ -932,11 +989,17 @@ def format_telegram(results: list[dict],
             tags = _tags(r)
             if r["signal"] == "S1":
                 metrics = f"Home concedes: `{r['home_conc']}`/g · Flags: `{r['flags']}/5`"
-            else:
+            elif r["signal"] == "S2":
                 metrics = (
                     f"Away scored: `{r['away_scored']}`/g · "
                     f"Away O2.5: `{r['away_overs']}%` · "
                     f"Home concedes: `{r['home_conc']}`/g"
+                )
+            else:  # S3 standalone
+                metrics = (
+                    f"Home BTTS: `{r['h_btts_pct']}%` · "
+                    f"Away BTTS: `{r['a_btts_pct']}%` · "
+                    f"Confidence: `{r['confidence']}%`"
                 )
             block = (
                 f"\n*{r['home']} vs {r['away']}* {tags}\n"
@@ -949,25 +1012,32 @@ def format_telegram(results: list[dict],
     # S1 — Leaky Home
     s1_sel = [r for r in results if r["signal"] == "S1" and r["tier"] == "Selective"]
     s1_oth = [r for r in results if r["signal"] == "S1" and r["tier"] != "Selective"]
-    _render_group(s1_sel, "🏠 *LEAKY HOME — Selective*",   "High ROI tier")
-    _render_group(s1_oth, "🏠 *LEAKY HOME — Balanced/Volume*", "Good ROI + volume")
+    _render_group(s1_sel, "🏠 *LEAKY HOME — Selective*",        "High ROI tier")
+    _render_group(s1_oth, "🏠 *LEAKY HOME — Balanced/Volume*",  "Good ROI + volume")
 
     # S2 — Strong Away
     s2_sel = [r for r in results if r["signal"] == "S2" and r["tier"] == "Selective"]
     s2_oth = [r for r in results if r["signal"] == "S2" and r["tier"] != "Selective"]
-    _render_group(s2_sel, "✈️ *STRONG AWAY — Selective*",   "Best overall ROI signal")
-    _render_group(s2_oth, "✈️ *STRONG AWAY — Balanced/Volume*", "Good ROI + volume")
+    _render_group(s2_sel, "✈️ *STRONG AWAY — Selective*",        "Best overall ROI signal")
+    _render_group(s2_oth, "✈️ *STRONG AWAY — Balanced/Volume*",  "Good ROI + volume")
+
+    # S3 — BTTS Form (standalone picks only)
+    s3_sel = [r for r in results if r["signal"] == "S3" and r["tier"] == "Selective"]
+    s3_oth = [r for r in results if r["signal"] == "S3" and r["tier"] != "Selective"]
+    _render_group(s3_sel, "⚽ *BTTS FORM — Selective*",          "Strong BTTS form in both venues")
+    _render_group(s3_oth, "⚽ *BTTS FORM — Balanced/Volume*",    "Good BTTS form")
 
     # Footer
-    total  = len(results)
-    sel    = sum(1 for r in results if r["tier"] == "Selective")
-    scan_t = datetime.now().strftime("%H:%M")
+    total   = len(results)
+    sel     = sum(1 for r in results if r["tier"] == "Selective")
+    s3_corr = sum(1 for r in results if r.get("s3"))
+    scan_t  = datetime.now().strftime("%H:%M")
 
-    s3_note = f" · {sum(1 for r in results if r.get('s3'))} corroborated by BTTS form" if any(r.get("s3") for r in results) else ""
+    corr_note = f" · {s3_corr} with BTTS corroboration" if s3_corr else ""
     blocks.append(
-        f"\n🕙 {scan_t} · {total} picks · {sel} selective{s3_note}\n"
-        "_Tags: (S1) Leaky Home · (S2) Strong Away_\n"
-        "_(S3) = BTTS form corroborates this pick — both teams likely to score adds confidence to O2.5_\n"
+        f"\n🕙 {scan_t} · {total} picks · {sel} selective{corr_note}\n"
+        "_Tags: (S1) Leaky Home · (S2) Strong Away · (S3) BTTS Form_\n"
+        "_(S3) on an S1/S2 pick = BTTS form also qualifies — added conviction_\n"
         "_Non-EU: no odds in data — verify manually before betting_\n"
         "_/o25 rescan to refresh_"
     )
