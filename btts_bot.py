@@ -69,12 +69,12 @@ LONDON_TZ = pytz.timezone("Europe/London")
 
 # Scheduled scan times (London local time)
 SCHEDULED_JOBS = [
-    {"day": 1, "hour": 14, "minute": 0, "label": "Tuesday 14:00"},   # Tuesday = weekday 1
-    {"day": 4, "hour": 18, "minute": 0, "label": "Friday 18:00"},    # Friday  = weekday 4
+    {"day": 2, "hour": 14, "minute": 0, "label": "Tuesday 14:00"},   # Tuesday = weekday 2
+    {"day": 5, "hour": 18, "minute": 0, "label": "Friday 18:00"},    # Friday  = weekday 5
 ]
 
 # How many days ahead the scheduled scan covers
-SCHEDULED_SCAN_DAYS = 7
+SCHEDULED_SCAN_DAYS = 4
 
 MAX_RETRIES      = 3
 RETRY_DELAY_MINS = 15
