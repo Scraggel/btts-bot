@@ -1,14 +1,14 @@
 """
 Over 2.5 Goals Analysis Engine
 -------------------------------
-Scans fixtures for two signals across 12 leagues using per-league
+Scans fixtures for two signals across 19 leagues using per-league
 parameters derived from a 3-season backtest.
 
   Signal 1 (S1) — Leaky Home
     Gate: home team avg goals conceded per home game >= threshold
     Flags: home overs rate, away overs rate, home avg total goals,
            home leaky-dominant rate, away avg goals scored on road
-    Minimum flags required: 3
+    Minimum flags required: 3 by default; some leagues require 4 (SC1)
     Odds floor: O2.5 market odds >= league minimum (where applicable)
 
   Signal 2 (S2) — Strong Away
@@ -27,11 +27,15 @@ parameters derived from a 3-season backtest.
 
 Leagues:
   European (odds in dataset):
-    E0  Premier League      E1  Championship
-    E2  League One          E3  League Two
-    D1  Bundesliga          D2  2. Bundesliga
-    F1  Ligue 1             F2  Ligue 2
+    E0  Premier League        E1  Championship
+    E2  League One            E3  League Two
+    D1  Bundesliga            D2  2. Bundesliga
+    F1  Ligue 1               F2  Ligue 2
     N1  Eredivisie
+    SP1 La Liga               SC0 Scottish Premiership
+    SC1 Scottish Championship B1  Belgian Pro League
+    P1  Primeira Liga         I1  Serie A
+    G1  Greek Super League
 
   Non-European (no odds — verify manually):
     BRA  Brazil Serie A     MEX  Mexico Liga MX
@@ -82,18 +86,25 @@ SEASON = _derive_season()
 # ─────────────────────────────────────────────────────────────────────────────
 
 LEAGUE_META = {
-    "E0":  {"name": "Premier League",     "is_european": True},
-    "E1":  {"name": "Championship",       "is_european": True},
-    "E2":  {"name": "League One",         "is_european": True},
-    "E3":  {"name": "League Two",         "is_european": True},
-    "D1":  {"name": "Bundesliga",         "is_european": True},
-    "D2":  {"name": "2. Bundesliga",      "is_european": True},
-    "F1":  {"name": "Ligue 1",            "is_european": True},
-    "F2":  {"name": "Ligue 2",            "is_european": True},
-    "N1":  {"name": "Eredivisie",         "is_european": True},
-    "BRA": {"name": "Brazil Serie A",     "is_european": False},
-    "MEX": {"name": "Mexico Liga MX",     "is_european": False},
-    "AUT": {"name": "Austria Bundesliga", "is_european": False},
+    "E0":  {"name": "Premier League",        "is_european": True},
+    "E1":  {"name": "Championship",          "is_european": True},
+    "E2":  {"name": "League One",            "is_european": True},
+    "E3":  {"name": "League Two",            "is_european": True},
+    "D1":  {"name": "Bundesliga",            "is_european": True},
+    "D2":  {"name": "2. Bundesliga",         "is_european": True},
+    "F1":  {"name": "Ligue 1",               "is_european": True},
+    "F2":  {"name": "Ligue 2",               "is_european": True},
+    "N1":  {"name": "Eredivisie",            "is_european": True},
+    "SP1": {"name": "La Liga",               "is_european": True},
+    "SC0": {"name": "Scottish Premiership",  "is_european": True},
+    "SC1": {"name": "Scottish Championship", "is_european": True},
+    "B1":  {"name": "Belgian Pro League",    "is_european": True},
+    "P1":  {"name": "Primeira Liga",         "is_european": True},
+    "I1":  {"name": "Serie A",               "is_european": True},
+    "G1":  {"name": "Greek Super League",    "is_european": True},
+    "BRA": {"name": "Brazil Serie A",        "is_european": False},
+    "MEX": {"name": "Mexico Liga MX",        "is_european": False},
+    "AUT": {"name": "Austria Bundesliga",    "is_european": False},
 }
 
 NON_EU = {k for k, v in LEAGUE_META.items() if not v["is_european"]}
@@ -122,54 +133,43 @@ NON_EU = {k for k, v in LEAGUE_META.items() if not v["is_european"]}
 SIGNAL_PARAMS = {
 
     # ── E0 — Premier League ──────────────────────────────────────────────────
-    # Row 2:  E0  S1-Leaky_Home  Selective  LB6  away_scored=1.2  away_overs=62.5%
-    #             home_concedes=1.25  home_overs=62.5%  home_total=3  home_leaky=35%
-    # Row 3:  E0  S2-Strong_Away Volume     LB7  away_scored=1.5  away_overs=50%
-    #             home_concedes=1.25  odds_floor=1.75
     "E0": {
         "s1": None,
         "s2": {
             "tier": "Balanced", "lookback": 7,
-            "away_scored": 1.0, "away_overs": 0.75, "home_concedes": 1.25,
+            "away_scored": 1.25, "away_overs": 0.75, "home_concedes": 1.25,
             "odds_floor": 1.75,
         },
     },
 
     # ── E1 — Championship ────────────────────────────────────────────────────
-    # Rows 4-5 are BTTS Balanced/Selective — no S1 or S2 O2.5 rows in the CSV
+    # S3 only — no S1/S2 O2.5 signals
     "E1": {
         "s1": None,
         "s2": None,
     },
 
     # ── E2 — League One ──────────────────────────────────────────────────────
-    # Row 6:  E2  S2-Strong_Away  Balanced  LB6  away_scored=1  away_overs=75%
-    #             home_concedes=1.25  odds_floor=1.85
-    # Row 7:  E2  BTTS  Selective — handled by btts_analysis
     "E2": {
         "s1": None,
         "s2": {
             "tier": "Balanced", "lookback": 6,
-            "away_scored": 1.0, "away_overs": 0.75, "home_concedes": 1.25,
+            "away_scored": 1.25, "away_overs": 0.75, "home_concedes": 1.25,
             "odds_floor": 1.80,
         },
     },
 
     # ── E3 — League Two ──────────────────────────────────────────────────────
-    # Row 8:  E3  S2-Strong_Away  Selective  LB6  away_scored=1.5  away_overs=75%
-    #             home_concedes=1.25  odds_floor=1.85
     "E3": {
         "s1": None,
         "s2": {
             "tier": "Balanced", "lookback": 6,
-            "away_scored": 1.0, "away_overs": 0.75, "home_concedes": 1.25,
+            "away_scored": 1.25, "away_overs": 0.75, "home_concedes": 1.25,
             "odds_floor": 1.80,
         },
     },
 
     # ── D1 — Bundesliga ──────────────────────────────────────────────────────
-    # Row 10: D1  S2-Strong_Away  Selective  LB7  away_scored=1.5  away_overs=62.5%
-    #             home_concedes=1.5  odds_floor=1.65
     "D1": {
         "s1": None,
         "s2": {
@@ -180,8 +180,6 @@ SIGNAL_PARAMS = {
     },
 
     # ── D2 — 2. Bundesliga ───────────────────────────────────────────────────
-    # Row 12: D2  S2-Strong_Away  Selective  LB8  away_scored=1.25  away_overs=50%
-    #             home_concedes=1.25  odds_floor=1.75
     "D2": {
         "s1": None,
         "s2": {
@@ -192,76 +190,153 @@ SIGNAL_PARAMS = {
     },
 
     # ── F1 — Ligue 1 ─────────────────────────────────────────────────────────
-    # Row 14: F1  S2-Strong_Away  Selective  LB8  away_scored=1.5  away_overs=50%
-    #             home_concedes=1.25  odds_floor=1.85
     "F1": {
         "s1": None,
         "s2": {
             "tier": "Selective", "lookback": 7,
-            "away_scored": 1.5, "away_overs": 0.50, "home_concedes": 1.25,
+            "away_scored": 1.5, "away_overs": 0.625, "home_concedes": 1.25,
             "odds_floor": 1.85,
         },
     },
 
     # ── F2 — Ligue 2 ─────────────────────────────────────────────────────────
-    # Row 15: F2  BTTS  Selective — handled by btts_analysis. No S1/S2 row.
+    # S3 only — no S1/S2 O2.5 signals
     "F2": {
         "s1": None,
         "s2": None,
     },
 
     # ── N1 — Eredivisie ──────────────────────────────────────────────────────
-    # Row 16: N1  S1-Leaky_Home  Balanced  LB8  away_scored=1.2  away_overs=62.5%
-    #             home_concedes=0.75  home_overs=62.5%  home_total=2.5  home_leaky=35%
-    # Row 17: N1  S2-Strong_Away  Selective  LB8  away_scored=1.25  away_overs=50%
-    #             home_concedes=1.0  odds_floor=1.85
     "N1": {
         "s1": {
             "tier": "Balanced", "lookback": 7,
             "home_concedes": 0.75, "home_overs": 0.625, "away_overs": 0.625,
             "home_total": 2.5, "home_leaky": 0.35, "away_scored": 1.2,
-            "odds_floor": 1.85,   # matches S2 floor for N1
+            "odds_floor": 1.85, "min_flags": 3,
         },
         "s2": {
             "tier": "Selective", "lookback": 7,
-            "away_scored": 1.25, "away_overs": 0.50, "home_concedes": 1.0,
+            "away_scored": 1.25, "away_overs": 0.625, "home_concedes": 1.0,
             "odds_floor": 1.85,
         },
     },
 
-    # ── BRA — Brazil Serie A ─────────────────────────────────────────────────
-    # Row 19: BRA  S2-Strong_Away  Selective  LB8  away_scored=1  away_overs=75%
-    #              home_concedes=1  odds_floor=None  breakeven=1.29
-    "BRA": {
+    # ── SP1 — La Liga ────────────────────────────────────────────────────────
+    # S1: Balanced  LB6  hC≥1.5  f≥3  ov≥62.5%  tg≥3.0  ld≥45%  aS≥1.4  oo≥1.75
+    # S2: Balanced  LB8  aS≥2.0  aO≥62.5%  hC≥1.0  oo≥1.86
+    "SP1": {
+        "s1": {
+            "tier": "Balanced", "lookback": 6,
+            "home_concedes": 1.5, "home_overs": 0.625, "away_overs": 0.625,
+            "home_total": 3.0, "home_leaky": 0.45, "away_scored": 1.4,
+            "odds_floor": 1.75, "min_flags": 3,
+        },
+        "s2": {
+            "tier": "Balanced", "lookback": 8,
+            "away_scored": 1.75, "away_overs": 0.625, "home_concedes": 1.0,
+            "odds_floor": 1.85,
+        },
+    },
+
+    # ── SC0 — Scottish Premiership ───────────────────────────────────────────
+    # S2: Balanced  LB7  aS≥1.0  aO≥75%  hC≥1.25  oo≥1.75
+    "SC0": {
+        "s1": None,
+        "s2": {
+            "tier": "Balanced", "lookback": 7,
+            "away_scored": 1.0, "away_overs": 0.75, "home_concedes": 1.25,
+            "odds_floor": 1.75,
+        },
+    },
+
+    # ── SC1 — Scottish Championship ──────────────────────────────────────────
+    # S1: Selective  LB6  hC≥0.75  f≥4  ov≥50%  tg≥2.75  ld≥45%  aS≥1.4  oo≥1.95
+    # Note: min_flags=4 overrides the global default of 3 for this league/signal.
+    "SC1": {
+        "s1": {
+            "tier": "Selective", "lookback": 6,
+            "home_concedes": 0.75, "home_overs": 0.50, "away_overs": 0.50,
+            "home_total": 2.75, "home_leaky": 0.45, "away_scored": 1.4,
+            "odds_floor": 1.95, "min_flags": 4,
+        },
+        "s2": None,
+    },
+
+    # ── B1 — Belgian Pro League ──────────────────────────────────────────────
+    # S2: Balanced  LB8  aS≥1.5  aO≥75%  hC≥1.0  oo≥1.75
+    "B1": {
+        "s1": None,
+        "s2": {
+            "tier": "Balanced", "lookback": 8,
+            "away_scored": 1.5, "away_overs": 0.75, "home_concedes": 1.25,
+            "odds_floor": 1.75,
+        },
+    },
+
+    # ── P1 — Primeira Liga ───────────────────────────────────────────────────
+    # S2: Balanced  LB6  aS≥2.0  aO≥50%  hC≥1.5  oo≥1.90
+    "P1": {
+        "s1": None,
+        "s2": {
+            "tier": "Balanced", "lookback": 6,
+            "away_scored": 1.75, "away_overs": 0.625, "home_concedes": 1.5,
+            "odds_floor": 1.90,
+        },
+    },
+
+    # ── I1 — Serie A ─────────────────────────────────────────────────────────
+    # S2: Balanced  LB6  aS≥1.75  aO≥75%  hC≥1.25  oo≥1.85
+    "I1": {
+        "s1": None,
+        "s2": {
+            "tier": "Balanced", "lookback": 6,
+            "away_scored": 1.75, "away_overs": 0.75, "home_concedes": 1.25,
+            "odds_floor": 1.85,
+        },
+    },
+
+    # ── G1 — Greek Super League ──────────────────────────────────────────────
+    # S2: Selective  LB7  aS≥1.0  aO≥75%  hC≥1.0  oo≥1.75
+    "G1": {
         "s1": None,
         "s2": {
             "tier": "Selective", "lookback": 7,
+            "away_scored": 1.0, "away_overs": 0.75, "home_concedes": 1.25,
+            "odds_floor": 1.75,
+        },
+    },
+
+    # ── BRA — Brazil Serie A ─────────────────────────────────────────────────
+    "BRA": {
+        "s1": None,
+        "s2": {
+            "tier": "Selective", "lookback": 8,
             "away_scored": 1.0, "away_overs": 0.75, "home_concedes": 1.0,
             "odds_floor": None, "breakeven": 1.29,
         },
     },
 
     # ── MEX — Mexico Liga MX ─────────────────────────────────────────────────
-    # Row 21: MEX  BTTS  Selective — handled by btts_analysis. No S1/S2 row.
+    # S3 only — no S1/S2 O2.5 signals
     "MEX": {
         "s1": None,
         "s2": None,
     },
 
     # ── AUT — Austria Bundesliga ─────────────────────────────────────────────
-    # Row 22: AUT  S2-Strong_Away  Selective  LB8  away_scored=1.5  away_overs=75%
-    #              home_concedes=1  odds_floor=None  breakeven=1.57
     "AUT": {
         "s1": None,
         "s2": {
-            "tier": "Selective", "lookback": 7,
+            "tier": "Selective", "lookback": 8,
             "away_scored": 1.5, "away_overs": 0.75, "home_concedes": 1.0,
             "odds_floor": None, "breakeven": 1.57,
         },
     },
 }
 
-# Minimum flags required for Signal 1 (from spec — always 3)
+# Default minimum flags required for Signal 1.
+# Individual leagues may override this via the "min_flags" key in their s1 params
+# (e.g. SC1 requires 4 flags; N1 and SP1 use the standard 3).
 S1_MIN_FLAGS = 3
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -289,15 +364,22 @@ S1_MIN_FLAGS = 3
 # ─────────────────────────────────────────────────────────────────────────────
 
 S3_PARAMS = {
-    "E0":  {"lookback": 6,  "conf_min": 50, "home_odds_min": 2.1, "o25_floor": 1.75},
-    "E1":  {"lookback": 7,  "conf_min": 50, "home_odds_min": 2.1, "o25_floor": 1.80},  # no S2 — aligned to E0
-    "E2":  {"lookback": 7,  "conf_min": 50, "home_odds_min": 2.1, "o25_floor": 1.80},
-    "E3":  {"lookback": 7,  "conf_min": 45, "home_odds_min": 1.7, "o25_floor": 1.80},
-    "D1":  {"lookback": 6,  "conf_min": 55, "home_odds_min": 1.7, "o25_floor": 1.65},
-    "F2":  {"lookback": 6,  "conf_min": 45, "home_odds_min": 2.3, "o25_floor": 1.85},  # no S2 — aligned to F1
-    "N1":  {"lookback": 7,  "conf_min": 45, "home_odds_min": 1.7, "o25_floor": 1.85},
-    "BRA": {"lookback": 8,  "conf_min": 55, "home_odds_min": 1.7, "o25_floor": None},  # non-EU
-    "MEX": {"lookback": 8,  "conf_min": 50, "home_odds_min": 1.7, "o25_floor": None},  # non-EU
+    # European leagues — odds floor aligned to their S2 floor (or nearest equivalent)
+    "E0":  {"lookback": 6,  "conf_min": 50, "home_odds_min": 2.1,  "o25_floor": 1.80},
+    "E1":  {"lookback": 7,  "conf_min": 50, "home_odds_min": 2.1,  "o25_floor": 1.80},  # no S2 — aligned to E0
+    "E2":  {"lookback": 7,  "conf_min": 50, "home_odds_min": 2.1,  "o25_floor": 1.80},
+    "E3":  {"lookback": 7,  "conf_min": 50, "home_odds_min": 1.9,  "o25_floor": 1.80},
+    "D1":  {"lookback": 6,  "conf_min": 55, "home_odds_min": 1.7,  "o25_floor": 1.65},
+    "F2":  {"lookback": 6,  "conf_min": 45, "home_odds_min": 2.3,  "o25_floor": 1.85},  # no S2 — aligned to F1
+    "N1":  {"lookback": 7,  "conf_min": 45, "home_odds_min": 1.7,  "o25_floor": 1.85},
+    # New leagues
+    "I1":  {"lookback": 7,  "conf_min": 45, "home_odds_min": 2.3,  "o25_floor": 1.90},   # S3 Balanced
+    "SP1": {"lookback": 7,  "conf_min": 50, "home_odds_min": 2.3,  "o25_floor": 1.85},   # S3 Balanced
+    "B1":  {"lookback": 8,  "conf_min": 40, "home_odds_min": 2.3,  "o25_floor": 1.85},   # S3 Balanced
+    "G1":  {"lookback": 7,  "conf_min": 40, "home_odds_min": 2.3,  "o25_floor": 1.85},   # S3 Balanced
+    # Non-European leagues — no odds in data, o25_floor=None skips odds check
+    "BRA": {"lookback": 8,  "conf_min": 55, "home_odds_min": 1.7,  "o25_floor": None},
+    "MEX": {"lookback": 8,  "conf_min": 50, "home_odds_min": 1.7,  "o25_floor": None},
 }
 
 
@@ -563,7 +645,9 @@ def check_signal1(df: pd.DataFrame, home: str, away: str,
 
     1. Gate: home avg goals conceded per home game >= p["home_concedes"]
     2. Flags: count satisfied conditions out of 5 possible flags
-    3. Must meet S1_MIN_FLAGS (3) to qualify
+    3. Must meet the required flag count — defaults to S1_MIN_FLAGS (3) but
+       individual leagues can override via "min_flags" in their s1 params
+       (e.g. SC1 requires 4 flags).
     4. Odds check is handled in the caller (needs the fixture row)
 
     Returns a result dict or None.
@@ -573,6 +657,8 @@ def check_signal1(df: pd.DataFrame, home: str, away: str,
         return None
 
     lb = p["lookback"]
+    # Per-league override; fall back to global default
+    min_flags = p.get("min_flags", S1_MIN_FLAGS)
 
     # Gate
     h_conc = _avg_home_conceded(df, home, fixture_date, lb)
@@ -602,7 +688,7 @@ def check_signal1(df: pd.DataFrame, home: str, away: str,
     if a_sc is not None and a_sc >= p["away_scored"]:
         flags += 1
 
-    if flags < S1_MIN_FLAGS:
+    if flags < min_flags:
         return None
 
     return {
@@ -610,6 +696,7 @@ def check_signal1(df: pd.DataFrame, home: str, away: str,
         "tier":       p["tier"],
         "home_conc":  round(h_conc, 2),
         "flags":      flags,
+        "min_flags":  min_flags,
         "odds_floor": p.get("odds_floor"),
         "breakeven":  p.get("breakeven"),
     }
@@ -988,7 +1075,7 @@ def format_telegram(results: list[dict],
         for r in picks:
             tags = _tags(r)
             if r["signal"] == "S1":
-                metrics = f"Home concedes: `{r['home_conc']}`/g · Flags: `{r['flags']}/5`"
+                metrics = f"Home concedes: `{r['home_conc']}`/g · Flags: `{r['flags']}/{r.get('min_flags', 3)}`"
             elif r["signal"] == "S2":
                 metrics = (
                     f"Away scored: `{r['away_scored']}`/g · "
