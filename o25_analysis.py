@@ -32,14 +32,11 @@ Leagues:
     D1  Bundesliga            D2  2. Bundesliga
     F1  Ligue 1               F2  Ligue 2
     N1  Eredivisie
+    ---------- New Leagues ----------
     SP1 La Liga               SC0 Scottish Premiership
     SC1 Scottish Championship B1  Belgian Pro League
     P1  Primeira Liga         I1  Serie A
     G1  Greek Super League
-
-  Non-European (no odds — verify manually):
-    BRA  Brazil Serie A     MEX  Mexico Liga MX
-    AUT  Austria Bundesliga
 
 Data sources:
   European history:     football-data.co.uk/mmz4281/{season}/{code}.csv
@@ -134,19 +131,27 @@ SIGNAL_PARAMS = {
 
     # ── E0 — Premier League ──────────────────────────────────────────────────
     "E0": {
-        "s1": None,
+        "s1": {
+            "tier": "Selective", "lookback": 8,
+            "home_concedes": 1.25, "home_overs": 0.625, "away_overs": 0.625,
+            "home_total": 3, "home_leaky": 0.35, "away_scored": 1.2,
+            "odds_floor": 1.85, "min_flags": 4,
+        },
         "s2": {
-            "tier": "Balanced", "lookback": 7,
-            "away_scored": 1.25, "away_overs": 0.75, "home_concedes": 1.25,
+            "tier": "Selective", "lookback": 6,
+            "away_scored": 1.5, "away_overs": 0.625, "home_concedes": 1.25,
             "odds_floor": 1.75,
         },
     },
 
     # ── E1 — Championship ────────────────────────────────────────────────────
-    # S3 only — no S1/S2 O2.5 signals
     "E1": {
         "s1": None,
-        "s2": None,
+        "s2": {
+            "tier": "Selective", "lookback": 6,
+            "away_scored": 1.5, "away_overs": 0.75, "home_concedes": 1.5,
+            "odds_floor": 1.75,
+        },
     },
 
     # ── E2 — League One ──────────────────────────────────────────────────────
@@ -155,7 +160,7 @@ SIGNAL_PARAMS = {
         "s2": {
             "tier": "Balanced", "lookback": 6,
             "away_scored": 1.25, "away_overs": 0.75, "home_concedes": 1.25,
-            "odds_floor": 1.80,
+            "odds_floor": 1.85,
         },
     },
 
@@ -163,9 +168,9 @@ SIGNAL_PARAMS = {
     "E3": {
         "s1": None,
         "s2": {
-            "tier": "Balanced", "lookback": 6,
-            "away_scored": 1.25, "away_overs": 0.75, "home_concedes": 1.25,
-            "odds_floor": 1.80,
+            "tier": "Selective", "lookback": 6,
+            "away_scored": 1.5, "away_overs": 0.75, "home_concedes": 1.25,
+            "odds_floor": 1.85,
         },
     },
 
@@ -183,9 +188,9 @@ SIGNAL_PARAMS = {
     "D2": {
         "s1": None,
         "s2": {
-            "tier": "Selective", "lookback": 7,
+            "tier": "Selective", "lookback": 8,
             "away_scored": 1.25, "away_overs": 0.50, "home_concedes": 1.25,
-            "odds_floor": 1.70,
+            "odds_floor": 1.75,
         },
     },
 
@@ -193,14 +198,13 @@ SIGNAL_PARAMS = {
     "F1": {
         "s1": None,
         "s2": {
-            "tier": "Selective", "lookback": 7,
+            "tier": "Selective", "lookback": 8,
             "away_scored": 1.5, "away_overs": 0.625, "home_concedes": 1.25,
             "odds_floor": 1.85,
         },
     },
 
     # ── F2 — Ligue 2 ─────────────────────────────────────────────────────────
-    # S3 only — no S1/S2 O2.5 signals
     "F2": {
         "s1": None,
         "s2": None,
@@ -209,10 +213,10 @@ SIGNAL_PARAMS = {
     # ── N1 — Eredivisie ──────────────────────────────────────────────────────
     "N1": {
         "s1": {
-            "tier": "Balanced", "lookback": 7,
+            "tier": "Selective", "lookback": 7,
             "home_concedes": 0.75, "home_overs": 0.625, "away_overs": 0.625,
             "home_total": 2.5, "home_leaky": 0.35, "away_scored": 1.2,
-            "odds_floor": 1.85, "min_flags": 3,
+            "odds_floor": 1.85, "min_flags": 4,
         },
         "s2": {
             "tier": "Selective", "lookback": 7,
@@ -222,48 +226,29 @@ SIGNAL_PARAMS = {
     },
 
     # ── SP1 — La Liga ────────────────────────────────────────────────────────
-    # S1: Balanced  LB6  hC≥1.5  f≥3  ov≥62.5%  tg≥3.0  ld≥45%  aS≥1.4  oo≥1.75
-    # S2: Balanced  LB8  aS≥2.0  aO≥62.5%  hC≥1.0  oo≥1.86
     "SP1": {
         "s1": {
             "tier": "Balanced", "lookback": 6,
             "home_concedes": 1.5, "home_overs": 0.625, "away_overs": 0.625,
             "home_total": 3.0, "home_leaky": 0.45, "away_scored": 1.4,
-            "odds_floor": 1.75, "min_flags": 3,
-        },
-        "s2": {
-            "tier": "Balanced", "lookback": 8,
-            "away_scored": 1.75, "away_overs": 0.625, "home_concedes": 1.0,
-            "odds_floor": 1.85,
-        },
-    },
-
-    # ── SC0 — Scottish Premiership ───────────────────────────────────────────
-    # S2: Balanced  LB7  aS≥1.0  aO≥75%  hC≥1.25  oo≥1.75
-    "SC0": {
-        "s1": None,
-        "s2": {
-            "tier": "Balanced", "lookback": 7,
-            "away_scored": 1.0, "away_overs": 0.75, "home_concedes": 1.25,
-            "odds_floor": 1.75,
-        },
-    },
-
-    # ── SC1 — Scottish Championship ──────────────────────────────────────────
-    # S1: Selective  LB6  hC≥0.75  f≥4  ov≥50%  tg≥2.75  ld≥45%  aS≥1.4  oo≥1.95
-    # Note: min_flags=4 overrides the global default of 3 for this league/signal.
-    "SC1": {
-        "s1": {
-            "tier": "Selective", "lookback": 6,
-            "home_concedes": 0.75, "home_overs": 0.50, "away_overs": 0.50,
-            "home_total": 2.75, "home_leaky": 0.45, "away_scored": 1.4,
-            "odds_floor": 1.95, "min_flags": 4,
+            "odds_floor": 1.80, "min_flags": 3,
         },
         "s2": None,
     },
 
+    # ── SC0 — Scottish Premiership ───────────────────────────────────────────
+    "SC0": {
+        "s1": None,
+        "s2": None,
+    },
+
+    # ── SC1 — Scottish Championship ──────────────────────────────────────────
+    "SC1": {
+        "s1": None,
+        "s2": None,
+    },
+
     # ── B1 — Belgian Pro League ──────────────────────────────────────────────
-    # S2: Balanced  LB8  aS≥1.5  aO≥75%  hC≥1.0  oo≥1.75
     "B1": {
         "s1": None,
         "s2": {
@@ -274,39 +259,30 @@ SIGNAL_PARAMS = {
     },
 
     # ── P1 — Primeira Liga ───────────────────────────────────────────────────
-    # S2: Balanced  LB6  aS≥2.0  aO≥50%  hC≥1.5  oo≥1.90
     "P1": {
-        "s1": None,
-        "s2": {
-            "tier": "Balanced", "lookback": 6,
-            "away_scored": 1.75, "away_overs": 0.625, "home_concedes": 1.5,
-            "odds_floor": 1.90,
-        },
+        "s1": {"tier": "Balanced", "lookback": 6,
+            "home_concedes": 1.0, "home_overs": 0.50, "away_overs": 0.625,
+            "home_total": 2.5, "home_leaky": 0.45, "away_scored": 1.4,
+            "odds_floor": 2.05, "min_flags": 3},
+        "s2": None,                      # inverted curve, 1.7 bets/season, -7.8%
     },
 
     # ── I1 — Serie A ─────────────────────────────────────────────────────────
-    # S2: Balanced  LB6  aS≥1.75  aO≥75%  hC≥1.25  oo≥1.85
     "I1": {
-        "s1": None,
-        "s2": {
-            "tier": "Balanced", "lookback": 6,
-            "away_scored": 1.75, "away_overs": 0.75, "home_concedes": 1.25,
-            "odds_floor": 1.85,
-        },
+        "s1": {"tier": "Selective", "lookback": 7,
+            "home_concedes": 1.0, "home_overs": 0.625, "away_overs": 0.625,
+            "home_total": 2.5, "home_leaky": 0.35, "away_scored": 1.2,
+            "odds_floor": 2.05, "min_flags": 3},
+        "s2": None,
     },
 
     # ── G1 — Greek Super League ──────────────────────────────────────────────
-    # S2: Selective  LB7  aS≥1.0  aO≥75%  hC≥1.0  oo≥1.75
     "G1": {
         "s1": None,
-        "s2": {
-            "tier": "Selective", "lookback": 7,
-            "away_scored": 1.0, "away_overs": 0.75, "home_concedes": 1.25,
-            "odds_floor": 1.75,
-        },
+        "s2": None,
     },
 
-    # ── BRA — Brazil Serie A ─────────────────────────────────────────────────
+    # ── BRA — Brazil Serie A (NOT IN USE) ─────────────────────────────────────────────────
     "BRA": {
         "s1": None,
         "s2": {
@@ -316,14 +292,13 @@ SIGNAL_PARAMS = {
         },
     },
 
-    # ── MEX — Mexico Liga MX ─────────────────────────────────────────────────
-    # S3 only — no S1/S2 O2.5 signals
+    # ── MEX — Mexico Liga MX (NOT IN USE) ─────────────────────────────────────────────────
     "MEX": {
         "s1": None,
         "s2": None,
     },
 
-    # ── AUT — Austria Bundesliga ─────────────────────────────────────────────
+    # ── AUT — Austria Bundesliga (NOT IN USE) ─────────────────────────────────────────────
     "AUT": {
         "s1": None,
         "s2": {
@@ -346,44 +321,33 @@ S1_MIN_FLAGS = 3
 #   1. confidence = home_btts_pct (last N home games) x away_btts_pct (last N away games) x 100
 #      must reach conf_min
 #   2. home_odds >= home_odds_min  (filters out heavy favourites)
-#   3. o25_odds >= o25_floor       (aligned to S2 odds floor for the same league;
-#                                   None = non-EU league, no odds in data — skip check)
-#
-# o25_floor source per league:
-#   E0 1.75  E1 1.75 (no S2 — aligned to E0)  E2 1.80  E3 1.80
-#   D1 1.65  F2 1.85 (no S2 — aligned to F1)  N1 1.85
-#   BRA None (non-EU)  MEX None (non-EU)
+#   3. o25_odds >= o25_floor       (aligned to S2 odds floor for the same league)
 #
 # Fields:
 #   lookback      - venue-specific games lookback (full window required)
 #   conf_min      - minimum confidence % to qualify
 #   home_odds_min - minimum home match result odds; None = no filter
-#   o25_floor     - minimum O2.5 odds; None = non-EU, no odds in data
+#   o25_floor     - minimum O2.5 odds
 #
 # Leagues not in this dict have no S3 parameters and are skipped.
 # ─────────────────────────────────────────────────────────────────────────────
 
 S3_PARAMS = {
     # European leagues — odds floor aligned to their S2 floor (or nearest equivalent)
-    "E0":  {"lookback": 6,  "conf_min": 50, "home_odds_min": 2.1,  "o25_floor": 1.80},
-    "E1":  {"lookback": 7,  "conf_min": 50, "home_odds_min": 2.1,  "o25_floor": 1.80},  # no S2 — aligned to E0
-    "E2":  {"lookback": 7,  "conf_min": 50, "home_odds_min": 2.1,  "o25_floor": 1.80},
-    "E3":  {"lookback": 7,  "conf_min": 50, "home_odds_min": 1.9,  "o25_floor": 1.80},
-    "D1":  {"lookback": 6,  "conf_min": 55, "home_odds_min": 1.7,  "o25_floor": 1.65},
-    "F2":  {"lookback": 6,  "conf_min": 45, "home_odds_min": 2.3,  "o25_floor": 1.85},  # no S2 — aligned to F1
-    "N1":  {"lookback": 7,  "conf_min": 45, "home_odds_min": 1.7,  "o25_floor": 1.85},
+    "E0":  {"lookback": 6,  "conf_min": 55, "home_odds_min": 2.3,  "o25_floor": 1.80},
+    "E1":  {"lookback": 8,  "conf_min": 55, "home_odds_min": 2.3,  "o25_floor": 1.85}, 
+    "E2":  {"lookback": 6,  "conf_min": 55, "home_odds_min": 2.1,  "o25_floor": 1.85},
+    "E3":  {"lookback": 8,  "conf_min": 55, "home_odds_min": 2.3,  "o25_floor": 1.80},
+    "D1":  {"lookback": 6,  "conf_min": 55, "home_odds_min": 2.0,  "o25_floor": 1.65},
+    "D2":  {"lookback": 8,  "conf_min": 55, "home_odds_min": 2.3,  "o25_floor": 1.85},
+    "F2":  {"lookback": 6,  "conf_min": 45, "home_odds_min": 2.3,  "o25_floor": 1.85},
+    "N1":  {"lookback": 6,  "conf_min": 55, "home_odds_min": 2.0,  "o25_floor": 1.80},
     # New leagues
     "I1":  {"lookback": 7,  "conf_min": 45, "home_odds_min": 2.3,  "o25_floor": 1.90},   # S3 Balanced
     "SP1": {"lookback": 7,  "conf_min": 50, "home_odds_min": 2.3,  "o25_floor": 1.85},   # S3 Balanced
-    "B1":  {"lookback": 8,  "conf_min": 40, "home_odds_min": 2.3,  "o25_floor": 1.85},   # S3 Balanced
+    "B1":  {"lookback": 8,  "conf_min": 55, "home_odds_min": 2.3,  "o25_floor": 1.85},   # S3 Balanced
     "G1":  {"lookback": 7,  "conf_min": 40, "home_odds_min": 2.3,  "o25_floor": 1.85},   # S3 Balanced
-    # Non-European leagues — no odds in data, o25_floor=None skips odds check
-    "BRA": {"lookback": 8,  "conf_min": 55, "home_odds_min": 1.7,  "o25_floor": None},
-    "MEX": {"lookback": 8,  "conf_min": 50, "home_odds_min": 1.7,  "o25_floor": None},
 }
-
-
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # URL helpers
