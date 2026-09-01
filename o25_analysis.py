@@ -135,9 +135,9 @@ SIGNAL_PARAMS = {
     "E1": {
         "s1": None,
         "s2": {
-            "tier": "Selective", "lookback": 6,
-            "away_scored": 1.5, "away_overs": 0.75, "home_concedes": 1.5,
-            "odds_floor": 1.75,
+            "tier": "Selective", "lookback": 1,
+            "away_scored": 0.1, "away_overs": 0.1, "home_concedes": 0.1,
+            "odds_floor": 0.1,
         },
     },
 
