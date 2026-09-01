@@ -10,17 +10,18 @@ Combines two analysis engines in a single bot process:
     /btts YYYY-MM-DD   — specific date
 
   O2.5 (S1 / S2 / S3) — scheduled + manual
-    Scheduled:
-      Tuesday  14:00 London — full upcoming fixtures scan (next 7 days)
-      Friday   18:00 London — full upcoming fixtures scan (next 7 days)
+    Scheduled (sends both the standard and look-back reports):
+      Tuesday  14:00 London — full upcoming fixtures scan (next 4 days)
+      Friday   18:00 London — full upcoming fixtures scan (next 4 days)
     Manual:
       /o25               — next 24 hours
       /o25 YYYY-MM-DD    — specific date override
 
-  O2.5 long-back (S1 / S2 / S3, multi-season history) — manual only
+  O2.5 look-back (S1 / S2 / S3, multi-season history) — scheduled + manual
     Same signals and parameters as /o25, but history spans this season
     plus the previous season, so signals can still fire early in a new
     season before enough current-season games have been played.
+    Runs alongside the standard scan in the Tuesday/Friday schedule above.
     Manual:
       /o25lb             — next 24 hours
       /o25lb YYYY-MM-DD  — specific date override
@@ -41,6 +42,7 @@ import os
 import sys
 from datetime import date, datetime, timedelta
 
+import pandas as pd
 import pytz
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
@@ -102,30 +104,34 @@ logger = logging.getLogger(__name__)
 # Full-range scan (used by scheduled jobs)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def run_full_scan(days_ahead: int = SCHEDULED_SCAN_DAYS) -> list[dict]:
+def _get_window_fixtures(days_ahead: int) -> pd.DataFrame:
     """
-    Download fixtures and run O2.5 analysis across the next `days_ahead` days.
-    Uses the existing get_fixtures_in_window helper with a wide window, then
-    calls run_analysis once per date found so historical stats are scoped
-    correctly per fixture date.
+    Fetch fixtures once and filter to the scan window. Shared by run_full_scan
+    and run_full_scan_lb so a scheduled run that does both doesn't download
+    fixtures.csv twice.
     """
     now = datetime.now()
     end = now + timedelta(days=days_ahead)
-
     fixtures_df = download_fixtures()
-    window_fixtures = get_fixtures_in_window(fixtures_df, now, end)
+    return get_fixtures_in_window(fixtures_df, now, end)
 
+
+def _run_full_scan_core(window_fixtures: pd.DataFrame, analysis_fn) -> list[dict]:
+    """
+    Shared multi-day scan logic: given a fixture window, call analysis_fn
+    (either o25_run_analysis or o25_lb) once per unique fixture date, dedupe
+    across dates, and re-sort.
+    """
     if window_fixtures.empty:
         return []
 
-    # Collect unique fixture dates in the window
     fixture_dates = sorted(window_fixtures["Date"].dt.date.unique())
 
     all_results: list[dict] = []
     seen = set()   # deduplicate across date calls
 
     for fdate in fixture_dates:
-        daily = o25_run_analysis(target_date=fdate)
+        daily = analysis_fn(target_date=fdate)
         for r in daily:
             key = (r["home"], r["away"], r["date"])
             if key not in seen:
@@ -144,10 +150,41 @@ def run_full_scan(days_ahead: int = SCHEDULED_SCAN_DAYS) -> list[dict]:
     return all_results
 
 
-def format_full_scan_telegram(results: list[dict], days_ahead: int = SCHEDULED_SCAN_DAYS) -> str:
+def run_full_scan(days_ahead: int = SCHEDULED_SCAN_DAYS,
+                  window_fixtures: pd.DataFrame = None) -> list[dict]:
+    """
+    Run the standard (single-season) O2.5 analysis across the next
+    `days_ahead` days — same signals as /o25.
+    Pass a pre-fetched window_fixtures to skip re-downloading fixtures.csv
+    (used by scheduled_full_scan, which also runs run_full_scan_lb).
+    """
+    if window_fixtures is None:
+        window_fixtures = _get_window_fixtures(days_ahead)
+    return _run_full_scan_core(window_fixtures, o25_run_analysis)
+
+
+def run_full_scan_lb(days_ahead: int = SCHEDULED_SCAN_DAYS,
+                     n_seasons: int = O25_LB_SEASONS,
+                     window_fixtures: pd.DataFrame = None) -> list[dict]:
+    """
+    Run the look-back (multi-season) O2.5 analysis across the next
+    `days_ahead` days — same signals as /o25lb.
+    Pass a pre-fetched window_fixtures to skip re-downloading fixtures.csv.
+    """
+    if window_fixtures is None:
+        window_fixtures = _get_window_fixtures(days_ahead)
+    return _run_full_scan_core(
+        window_fixtures,
+        lambda target_date: o25_lb(target_date=target_date, n_seasons=n_seasons),
+    )
+
+
+def format_full_scan_telegram(results: list[dict], days_ahead: int = SCHEDULED_SCAN_DAYS,
+                              title: str = "📈 O2.5 Scheduled Scan") -> str:
     """
     Format a multi-day scheduled scan result.
     Groups picks by date for readability.
+    `title` lets the look-back scan reuse this formatter with its own header.
     """
     now = datetime.now(LONDON_TZ)
     scan_label = now.strftime("%A %d %b %Y, %H:%M")
@@ -155,7 +192,7 @@ def format_full_scan_telegram(results: list[dict], days_ahead: int = SCHEDULED_S
 
     if not results:
         return (
-            f"*📈 O2.5 Scheduled Scan*\n"
+            f"*{title}*\n"
             f"_{scan_label} → {end_label}_\n\n"
             f"_No qualifying fixtures in the next {days_ahead} days._"
         )
@@ -166,7 +203,7 @@ def format_full_scan_telegram(results: list[dict], days_ahead: int = SCHEDULED_S
         by_date.setdefault(r["date"], []).append(r)
 
     blocks = [
-        f"*📈 O2.5 Scheduled Scan — {days_ahead}-day window*",
+        f"*{title} — {days_ahead}-day window*",
         f"_{scan_label} → {end_label}_",
     ]
 
@@ -342,7 +379,7 @@ async def cmd_o25lb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         target = o25_parse_date(first_arg)
         day_name = DAY_NAMES[target.weekday()]
         await update.message.reply_text(
-            f"⏳ Fetching O2.5 long-back data ({O25_LB_SEASONS} seasons) "
+            f"⏳ Fetching O2.5 look-back data ({O25_LB_SEASONS} seasons) "
             f"for {day_name} {target.strftime('%d %b %Y')}..."
         )
         try:
@@ -351,13 +388,13 @@ async def cmd_o25lb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await _send_long(context.bot, update.message.chat_id,
                              message, o25_split_messages)
         except Exception as e:
-            logger.error(f"O2.5 long-back analysis failed: {e}")
-            await update.message.reply_text(f"❌ O2.5 long-back analysis failed: {e}")
+            logger.error(f"O2.5 look-back analysis failed: {e}")
+            await update.message.reply_text(f"❌ O2.5 look-back analysis failed: {e}")
         return
 
     # Default: 24-hour rolling window
     await update.message.reply_text(
-        f"⏳ Running O2.5 long-back scan ({O25_LB_SEASONS} seasons) — next 24 hours..."
+        f"⏳ Running O2.5 look-back scan ({O25_LB_SEASONS} seasons) — next 24 hours..."
     )
     try:
         results = o25_lb(use_24h_window=True, n_seasons=O25_LB_SEASONS)
@@ -365,8 +402,8 @@ async def cmd_o25lb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await _send_long(context.bot, update.message.chat_id,
                          message, o25_split_messages)
     except Exception as e:
-        logger.error(f"O2.5 long-back scan failed: {e}")
-        await update.message.reply_text(f"❌ O2.5 long-back scan failed: {e}")
+        logger.error(f"O2.5 look-back scan failed: {e}")
+        await update.message.reply_text(f"❌ O2.5 look-back scan failed: {e}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -376,8 +413,11 @@ async def cmd_o25lb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def scheduled_full_scan(context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Runs on Tuesday 14:00 and Friday 18:00 London time.
-    Scans all fixtures across the next 7 days and delivers a full report.
-    Retries up to MAX_RETRIES times if the data source is unavailable.
+    Scans all fixtures across the next SCHEDULED_SCAN_DAYS days and sends
+    two reports: the standard (single-season) scan and the look-back
+    (multi-season) scan, back to back. Both share one fixtures.csv download.
+    Retries up to MAX_RETRIES times if the data source is unavailable or
+    neither scan turns up anything yet.
     """
     now_london = datetime.now(LONDON_TZ)
     label = now_london.strftime("%A %d %b, %H:%M")
@@ -386,16 +426,30 @@ async def scheduled_full_scan(context: ContextTypes.DEFAULT_TYPE) -> None:
     for attempt in range(1, MAX_RETRIES + 1):
         logger.info(f"Full scan attempt {attempt}/{MAX_RETRIES}")
         try:
-            results = run_full_scan(days_ahead=SCHEDULED_SCAN_DAYS)
-            message = format_full_scan_telegram(results, days_ahead=SCHEDULED_SCAN_DAYS)
+            window_fixtures = _get_window_fixtures(SCHEDULED_SCAN_DAYS)
 
-            if not results and attempt < MAX_RETRIES:
+            results = run_full_scan(SCHEDULED_SCAN_DAYS, window_fixtures=window_fixtures)
+            lb_results = run_full_scan_lb(
+                SCHEDULED_SCAN_DAYS, n_seasons=O25_LB_SEASONS, window_fixtures=window_fixtures
+            )
+
+            if not results and not lb_results and attempt < MAX_RETRIES:
                 logger.warning(f"No results yet — retrying in {RETRY_DELAY_MINS}m")
                 await asyncio.sleep(RETRY_DELAY_MINS * 60)
                 continue
 
+            message = format_full_scan_telegram(results, days_ahead=SCHEDULED_SCAN_DAYS)
+            lb_message = format_full_scan_telegram(
+                lb_results, days_ahead=SCHEDULED_SCAN_DAYS,
+                title="📈 O2.5 Look-back Scheduled Scan",
+            )
+
             await _send_long(context.bot, CHAT_ID, message, _generic_split)
-            logger.info(f"Scheduled full scan sent — {len(results)} picks.")
+            await _send_long(context.bot, CHAT_ID, lb_message, _generic_split)
+            logger.info(
+                f"Scheduled full scan sent — {len(results)} picks, "
+                f"{len(lb_results)} long-back picks."
+            )
             return
 
         except Exception as e:
@@ -408,7 +462,7 @@ async def scheduled_full_scan(context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id=CHAT_ID,
         text=(
             f"❌ Scheduled O2.5 scan failed after {MAX_RETRIES} attempts. "
-            "Use /o25 to try a 24h manual scan."
+            "Use /o25 or /o25lb to try a manual scan."
         ),
     )
 
@@ -422,11 +476,11 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "*⚽ Welcome to Sports Signals Bot*\n\n"
         "*O2.5 Signals*\n"
         "`/o25` — next 24 hours of O2.5 picks\n"
-        "`/o25 YYYY-MM-DD` — specific date override\n"
-        "_Scheduled full scan: Tuesday 14:00 & Friday 18:00 (London time)_\n\n"
-        "*O2.5 Long-back* _(multi-season history)_\n"
+        "`/o25 YYYY-MM-DD` — specific date override\n\n"
+        "*O2.5 Look-back* _(multi-season history)_\n"
         "`/o25lb` — next 24 hours, using this + last season's data\n"
         "`/o25lb YYYY-MM-DD` — specific date override\n\n"
+        "_Scheduled scan (sends both reports): Tuesday 14:00 & Friday 18:00 (London time)_\n\n"
         "*BTTS Signal* _(manual only)_\n"
         "`/btts` — today's BTTS picks\n"
         "`/btts tomorrow` — tomorrow's picks\n"
@@ -448,12 +502,12 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "  • Tuesday 14:00 — full 7-day fixture scan\n"
         "  • Friday 18:00  — full 7-day fixture scan\n"
         "_Both use London time and cover all configured leagues_\n\n"
-        f"*📈 O2.5 Long-back* _(history spans {O25_LB_SEASONS} seasons)_\n"
+        f"*📈 O2.5 Look-back* _(history spans {O25_LB_SEASONS} seasons)_\n"
         "`/o25lb` — next 24 hours of O2.5 picks, multi-season lookback\n"
         "`/o25lb YYYY-MM-DD` — specific date override\n"
         "_Same signals/thresholds as /o25 — just more history behind them, "
         "useful early in a new season_\n"
-        "_Manual only — call on demand_\n\n"
+        "_Also included automatically in the Tuesday/Friday scheduled scan_\n\n"
         "*⚽ BTTS Signal*\n"
         "`/btts` — today's BTTS picks\n"
         "`/btts tomorrow` — tomorrow's picks\n"
@@ -517,8 +571,11 @@ def main() -> None:
 
     logger.info("Sports Signals Bot started.")
     logger.info("BTTS: manual only (/btts)")
-    logger.info("/o25: manual 24-hour window")
-    logger.info(f"/o25lb: manual 24-hour window, {O25_LB_SEASONS}-season lookback")
+    logger.info("/o25: manual 24-hour window + Tuesday/Friday scheduled scan")
+    logger.info(
+        f"/o25lb: manual 24-hour window ({O25_LB_SEASONS}-season lookback) "
+        "+ Tuesday/Friday scheduled scan"
+    )
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
