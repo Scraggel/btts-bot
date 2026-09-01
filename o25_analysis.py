@@ -1,14 +1,14 @@
 """
 Over 2.5 Goals Analysis Engine
 -------------------------------
-Scans fixtures for two signals across 19 leagues using per-league
+Scans fixtures for two signals across 13 leagues using per-league
 parameters derived from a 3-season backtest.
 
   Signal 1 (S1) — Leaky Home
     Gate: home team avg goals conceded per home game >= threshold
     Flags: home overs rate, away overs rate, home avg total goals,
            home leaky-dominant rate, away avg goals scored on road
-    Minimum flags required: 3 by default; some leagues require 4 (SC1)
+    Minimum flags required: 3 by default, some leagues require 4
     Odds floor: O2.5 market odds >= league minimum (where applicable)
 
   Signal 2 (S2) — Strong Away
@@ -21,30 +21,26 @@ parameters derived from a 3-season backtest.
   Signal 3 (S3) — BTTS Form (first-class signal, per-league parameters)
     Confidence = home_btts_pct (last N home games) x away_btts_pct (last N away games) x 100
     Three gates: confidence >= conf_min  AND  home_odds >= home_odds_min
-                 AND  o25_odds >= o25_floor (aligned to S2 floor; skipped for non-EU)
+                 AND  o25_odds >= o25_floor (aligned to S2 floor)
     Fires standalone when S1/S2 do not trigger; also shown as a corroboration
     tag (S1)(S3) or (S2)(S3) when S3 qualifies on the same fixture.
 
 Leagues:
-  European (odds in dataset):
     E0  Premier League        E1  Championship
     E2  League One            E3  League Two
     D1  Bundesliga            D2  2. Bundesliga
     F1  Ligue 1               F2  Ligue 2
     N1  Eredivisie
-    ---------- New Leagues ----------
-    SP1 La Liga               SC0 Scottish Premiership
-    SC1 Scottish Championship B1  Belgian Pro League
+    SP1 La Liga
+    B1  Belgian Pro League
     P1  Primeira Liga         I1  Serie A
-    G1  Greek Super League
 
 Data sources:
-  European history:     football-data.co.uk/mmz4281/{season}/{code}.csv
-  Non-European history: football-data.co.uk/new/{code}.csv
-  All fixtures:         football-data.co.uk/fixtures.csv
+  History:   football-data.co.uk/mmz4281/{season}/{code}.csv
+  Fixtures:  football-data.co.uk/fixtures.csv
 
 Scheduling:
-  Automated: 08:00 daily — covers next 24 hours (catches early Brazilian KOs)
+  Automated: 08:00 daily — covers next 24 hours
   Manual:    /o25, /o25 tomorrow, /o25 YYYY-MM-DD, /o25 rescan
 """
 
@@ -83,28 +79,20 @@ SEASON = _derive_season()
 # ─────────────────────────────────────────────────────────────────────────────
 
 LEAGUE_META = {
-    "E0":  {"name": "Premier League",        "is_european": True},
-    "E1":  {"name": "Championship",          "is_european": True},
-    "E2":  {"name": "League One",            "is_european": True},
-    "E3":  {"name": "League Two",            "is_european": True},
-    "D1":  {"name": "Bundesliga",            "is_european": True},
-    "D2":  {"name": "2. Bundesliga",         "is_european": True},
-    "F1":  {"name": "Ligue 1",               "is_european": True},
-    "F2":  {"name": "Ligue 2",               "is_european": True},
-    "N1":  {"name": "Eredivisie",            "is_european": True},
-    "SP1": {"name": "La Liga",               "is_european": True},
-    "SC0": {"name": "Scottish Premiership",  "is_european": True},
-    "SC1": {"name": "Scottish Championship", "is_european": True},
-    "B1":  {"name": "Belgian Pro League",    "is_european": True},
-    "P1":  {"name": "Primeira Liga",         "is_european": True},
-    "I1":  {"name": "Serie A",               "is_european": True},
-    "G1":  {"name": "Greek Super League",    "is_european": True},
-    "BRA": {"name": "Brazil Serie A",        "is_european": False},
-    "MEX": {"name": "Mexico Liga MX",        "is_european": False},
-    "AUT": {"name": "Austria Bundesliga",    "is_european": False},
+    "E0":  {"name": "Premier League"},
+    "E1":  {"name": "Championship"},
+    "E2":  {"name": "League One"},
+    "E3":  {"name": "League Two"},
+    "D1":  {"name": "Bundesliga"},
+    "D2":  {"name": "2. Bundesliga"},
+    "F1":  {"name": "Ligue 1"},
+    "F2":  {"name": "Ligue 2"},
+    "N1":  {"name": "Eredivisie"},
+    "SP1": {"name": "La Liga"},
+    "B1":  {"name": "Belgian Pro League"},
+    "P1":  {"name": "Primeira Liga"},
+    "I1":  {"name": "Serie A"},
 }
-
-NON_EU = {k for k, v in LEAGUE_META.items() if not v["is_european"]}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -123,8 +111,7 @@ NON_EU = {k for k, v in LEAGUE_META.items() if not v["is_european"]}
 #   home_total    - home avg total goals per home game (S1 flag)
 #   home_leaky    - home leaky-dominant rate (S1 flag), decimal
 #   away_scored   - away avg goals scored per away game
-#   odds_floor    - minimum O2.5 market odds; None = no floor / no odds in dataset
-#   breakeven     - reference breakeven for non-EU leagues
+#   odds_floor    - minimum O2.5 market odds; None = no floor
 # ─────────────────────────────────────────────────────────────────────────────
 
 SIGNAL_PARAMS = {
@@ -236,18 +223,6 @@ SIGNAL_PARAMS = {
         "s2": None,
     },
 
-    # ── SC0 — Scottish Premiership ───────────────────────────────────────────
-    "SC0": {
-        "s1": None,
-        "s2": None,
-    },
-
-    # ── SC1 — Scottish Championship ──────────────────────────────────────────
-    "SC1": {
-        "s1": None,
-        "s2": None,
-    },
-
     # ── B1 — Belgian Pro League ──────────────────────────────────────────────
     "B1": {
         "s1": None,
@@ -275,43 +250,10 @@ SIGNAL_PARAMS = {
             "odds_floor": 2.05, "min_flags": 3},
         "s2": None,
     },
-
-    # ── G1 — Greek Super League ──────────────────────────────────────────────
-    "G1": {
-        "s1": None,
-        "s2": None,
-    },
-
-    # ── BRA — Brazil Serie A (NOT IN USE) ─────────────────────────────────────────────────
-    "BRA": {
-        "s1": None,
-        "s2": {
-            "tier": "Selective", "lookback": 8,
-            "away_scored": 1.0, "away_overs": 0.75, "home_concedes": 1.0,
-            "odds_floor": None, "breakeven": 1.29,
-        },
-    },
-
-    # ── MEX — Mexico Liga MX (NOT IN USE) ─────────────────────────────────────────────────
-    "MEX": {
-        "s1": None,
-        "s2": None,
-    },
-
-    # ── AUT — Austria Bundesliga (NOT IN USE) ─────────────────────────────────────────────
-    "AUT": {
-        "s1": None,
-        "s2": {
-            "tier": "Selective", "lookback": 8,
-            "away_scored": 1.5, "away_overs": 0.75, "home_concedes": 1.0,
-            "odds_floor": None, "breakeven": 1.57,
-        },
-    },
 }
 
 # Default minimum flags required for Signal 1.
-# Individual leagues may override this via the "min_flags" key in their s1 params
-# (e.g. SC1 requires 4 flags; N1 and SP1 use the standard 3).
+# Individual leagues may override this via the "min_flags" key in their s1 params.
 S1_MIN_FLAGS = 3
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -327,52 +269,33 @@ S1_MIN_FLAGS = 3
 #   lookback      - venue-specific games lookback (full window required)
 #   conf_min      - minimum confidence % to qualify
 #   home_odds_min - minimum home match result odds; None = no filter
-#   o25_floor     - minimum O2.5 odds
+#   o25_floor     - minimum O2.5 odds; None = no floor
 #
 # Leagues not in this dict have no S3 parameters and are skipped.
 # ─────────────────────────────────────────────────────────────────────────────
 
 S3_PARAMS = {
-    # European leagues — odds floor aligned to their S2 floor (or nearest equivalent)
     "E0":  {"lookback": 6,  "conf_min": 55, "home_odds_min": 2.3,  "o25_floor": 1.80},
-    "E1":  {"lookback": 8,  "conf_min": 55, "home_odds_min": 2.3,  "o25_floor": 1.85}, 
+    "E1":  {"lookback": 8,  "conf_min": 55, "home_odds_min": 2.3,  "o25_floor": 1.85},
     "E2":  {"lookback": 6,  "conf_min": 55, "home_odds_min": 2.1,  "o25_floor": 1.85},
     "E3":  {"lookback": 8,  "conf_min": 55, "home_odds_min": 2.3,  "o25_floor": 1.80},
     "D1":  {"lookback": 6,  "conf_min": 55, "home_odds_min": 2.0,  "o25_floor": 1.65},
     "D2":  {"lookback": 8,  "conf_min": 55, "home_odds_min": 2.3,  "o25_floor": 1.85},
     "F2":  {"lookback": 6,  "conf_min": 45, "home_odds_min": 2.3,  "o25_floor": 1.85},
     "N1":  {"lookback": 6,  "conf_min": 55, "home_odds_min": 2.0,  "o25_floor": 1.80},
-    # New leagues
-    "I1":  {"lookback": 7,  "conf_min": 45, "home_odds_min": 2.3,  "o25_floor": 1.90},   # S3 Balanced
-    "SP1": {"lookback": 7,  "conf_min": 50, "home_odds_min": 2.3,  "o25_floor": 1.85},   # S3 Balanced
-    "B1":  {"lookback": 8,  "conf_min": 55, "home_odds_min": 2.3,  "o25_floor": 1.85},   # S3 Balanced
-    "G1":  {"lookback": 7,  "conf_min": 40, "home_odds_min": 2.3,  "o25_floor": 1.85},   # S3 Balanced
+    "I1":  {"lookback": 7,  "conf_min": 45, "home_odds_min": 2.3,  "o25_floor": 1.90},
+    "SP1": {"lookback": 7,  "conf_min": 50, "home_odds_min": 2.3,  "o25_floor": 1.85},
+    "B1":  {"lookback": 8,  "conf_min": 55, "home_odds_min": 2.3,  "o25_floor": 1.85},
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
 # URL helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
-# European leagues — fixtures and results are in the main football-data files
-EU_FIXTURES_URL  = "https://www.football-data.co.uk/fixtures.csv"
+FIXTURES_URL = "https://www.football-data.co.uk/fixtures.csv"
 
-# Non-European leagues — completely separate fixtures file
-NON_EU_FIXTURES_URL = "https://www.football-data.co.uk/new_league_fixtures.csv"
-
-# The Div column in new_league_fixtures.csv uses country/league name strings,
-# not the short codes we use internally. This maps what the site puts in Div
-# to our internal code so we can match fixtures to history files.
-NON_EU_DIV_MAP = {
-    "Brazil":  "BRA",
-    "Mexico":  "MEX",
-    "Austria": "AUT",
-}
 
 def _history_url(code: str) -> str:
-    if code in NON_EU:
-        # Non-EU results: football-data.co.uk/new/BRA.csv etc.
-        return f"https://www.football-data.co.uk/new/{code}.csv"
-    # European results: football-data.co.uk/mmz4281/2526/E0.csv etc.
     return f"https://www.football-data.co.uk/mmz4281/{SEASON}/{code}.csv"
 
 
@@ -406,41 +329,11 @@ def _fetch_csv(url: str) -> pd.DataFrame:
 
 def download_fixtures() -> pd.DataFrame:
     """
-    Download upcoming fixtures from both sources and combine into one DataFrame.
-
-    European leagues:     football-data.co.uk/fixtures.csv
-    Non-European leagues: football-data.co.uk/new_league_fixtures.csv
-
-    The non-EU file uses country/league names in the Div column (e.g. 'Brazil')
-    rather than short codes. These are remapped to our internal codes via
-    NON_EU_DIV_MAP before merging, so all downstream code sees consistent Div values.
+    Download upcoming fixtures.
+    Source: football-data.co.uk/fixtures.csv
     """
-    frames = []
-
-    # European fixtures
-    try:
-        eu = _fetch_csv(EU_FIXTURES_URL)
-        eu = eu.dropna(subset=["HomeTeam", "AwayTeam", "Div"])
-        frames.append(eu)
-    except Exception as e:
-        print(f"  -> WARNING: EU fixtures fetch failed ({e})")
-
-    # Non-European fixtures
-    try:
-        non_eu = _fetch_csv(NON_EU_FIXTURES_URL)
-        non_eu = non_eu.dropna(subset=["HomeTeam", "AwayTeam", "Div"])
-        # Remap Div values from country names to internal codes
-        non_eu["Div"] = non_eu["Div"].map(NON_EU_DIV_MAP)
-        # Drop rows where Div didn't map (leagues we don't cover)
-        non_eu = non_eu.dropna(subset=["Div"])
-        frames.append(non_eu)
-    except Exception as e:
-        print(f"  -> WARNING: Non-EU fixtures fetch failed ({e})")
-
-    if not frames:
-        return pd.DataFrame()
-
-    df = pd.concat(frames, ignore_index=True)
+    df = _fetch_csv(FIXTURES_URL)
+    df = df.dropna(subset=["HomeTeam", "AwayTeam", "Div"])
     df["Date"] = pd.to_datetime(df["Date"], dayfirst=True, errors="coerce")
     df = df.dropna(subset=["Date"])
     if "Time" not in df.columns:
@@ -452,7 +345,7 @@ def download_fixtures() -> pd.DataFrame:
 
 
 def download_history(code: str) -> pd.DataFrame:
-    """Download completed results for a league (European or non-European URL)."""
+    """Download completed results for a league."""
     url = _history_url(code)
     resp = requests.get(url, timeout=15)
     resp.raise_for_status()
@@ -610,8 +503,7 @@ def check_signal1(df: pd.DataFrame, home: str, away: str,
     1. Gate: home avg goals conceded per home game >= p["home_concedes"]
     2. Flags: count satisfied conditions out of 5 possible flags
     3. Must meet the required flag count — defaults to S1_MIN_FLAGS (3) but
-       individual leagues can override via "min_flags" in their s1 params
-       (e.g. SC1 requires 4 flags).
+       individual leagues can override via "min_flags" in their s1 params.
     4. Odds check is handled in the caller (needs the fixture row)
 
     Returns a result dict or None.
@@ -662,7 +554,6 @@ def check_signal1(df: pd.DataFrame, home: str, away: str,
         "flags":      flags,
         "min_flags":  min_flags,
         "odds_floor": p.get("odds_floor"),
-        "breakeven":  p.get("breakeven"),
     }
 
 
@@ -702,7 +593,6 @@ def check_signal2(df: pd.DataFrame, home: str, away: str,
         "away_overs":  round(a_ov * 100, 1),
         "home_conc":   round(h_conc, 2),
         "odds_floor":  p.get("odds_floor"),
-        "breakeven":   p.get("breakeven"),
     }
 
 
@@ -710,21 +600,14 @@ def check_signal2(df: pd.DataFrame, home: str, away: str,
 # Odds floor check
 # ─────────────────────────────────────────────────────────────────────────────
 
-def passes_odds_floor(o25_odds: float | None, sig: dict,
-                      code: str) -> tuple[bool, str]:
+def passes_odds_floor(o25_odds: float | None, sig: dict) -> tuple[bool, str]:
     """
     Returns (passes: bool, display_note: str).
-
-    Non-EU leagues: always pass — user must verify manually.
-    EU leagues:     fail if O2.5 odds are below the floor (pick is excluded).
-                    If odds not in CSV, pass with a note.
+    Fails if O2.5 odds are below the league's floor (pick excluded).
+    If no floor is defined, or odds aren't present in the data, the pick
+    passes through with a note.
     """
     odds_floor = sig.get("odds_floor")
-    breakeven  = sig.get("breakeven")
-
-    if code in NON_EU:
-        be_str = f"BE: {breakeven:.2f}" if breakeven else "verify odds"
-        return True, f"No odds data · {be_str}"
 
     if odds_floor is None:
         # No floor defined for this signal — always pass
@@ -753,8 +636,7 @@ def run_analysis(target_date: date = None,
     Args:
         target_date:     Analyse fixtures on this specific calendar date.
         use_24h_window:  If True (used by the 8am scheduled job), analyse all
-                         fixtures in the next 24 hours. This catches early
-                         Brazilian kick-offs that fall past midnight local time.
+                         fixtures in the next 24 hours.
 
     Returns a list of qualifying fixture dicts, sorted:
       S1 first, S2 second; Selective before Balanced/Volume; then by kick-off.
@@ -789,8 +671,8 @@ def run_analysis(target_date: date = None,
     print(f"  -> {len(day_fixtures)} fixtures · {window_label}")
 
     # Load history for each league that has S1, S2, or S3 configured.
-    # S3-only leagues (e.g. E1, F2, MEX) are included so standalone S3
-    # picks can be evaluated even when S1/S2 are not active for that league.
+    # S3-only leagues (e.g. F2) are included so standalone S3 picks can be
+    # evaluated even when S1/S2 are not active for that league.
     leagues_needed = [
         c for c in day_fixtures["Div"].unique()
         if c in LEAGUE_META
@@ -837,13 +719,12 @@ def run_analysis(target_date: date = None,
             if sig is None:
                 continue
 
-            passes, odds_note = passes_odds_floor(o25_odds, sig, code)
+            passes, odds_note = passes_odds_floor(o25_odds, sig)
             if not passes:
                 skipped_odds += 1
                 continue
 
             # S3 evaluated alongside S1/S2 to determine corroboration flag.
-            # check_signal3 now returns a dict (or None) — truthy test unchanged.
             s3_result = check_signal3(df, home, away, fdate, code, home_odds, o25_odds)
             s12_fixture_keys.add((home, away, fdate))
 
@@ -858,23 +739,20 @@ def run_analysis(target_date: date = None,
                 "home_odds":   home_odds,
                 "o25_odds":    o25_odds,
                 "odds_note":   odds_note,
-                "is_non_eu":   code in NON_EU,
                 "s3":          s3_result is not None,   # corroboration flag
                 **sig,
             })
 
         # ── S3 standalone ────────────────────────────────────────────────────
         # Only add a standalone S3 pick if this fixture was NOT already
-        # captured by S1 or S2 above.  S3-only leagues (e.g. E1, F2, MEX)
-        # have no S1/S2 config so they will always reach this branch.
+        # captured by S1 or S2 above. S3-only leagues (e.g. F2) have no
+        # S1/S2 config so they will always reach this branch.
         fixture_key = (home, away, fdate)
         if fixture_key not in s12_fixture_keys:
             s3_result = check_signal3(df, home, away, fdate, code, home_odds, o25_odds)
             if s3_result is not None:
                 floor = s3_result.get("o25_floor")
-                if code in NON_EU:
-                    odds_note = "No odds data · verify manually"
-                elif o25_odds is not None:
+                if o25_odds is not None:
                     odds_note = f"O2.5 {o25_odds:.2f}" + (f" (floor: {floor:.2f})" if floor else "")
                 else:
                     odds_note = f"O2.5 not in data" + (f" (floor: {floor:.2f})" if floor else "")
@@ -890,7 +768,6 @@ def run_analysis(target_date: date = None,
                     "home_odds":   home_odds,
                     "o25_odds":    o25_odds,
                     "odds_note":   odds_note,
-                    "is_non_eu":   code in NON_EU,
                     "s3":          False,   # this IS the S3 pick — no separate corroboration flag
                     **s3_result,
                 })
@@ -927,8 +804,7 @@ def check_signal3(df: pd.DataFrame, home: str, away: str,
     Three gates must all pass:
       1. confidence = home_btts_pct x away_btts_pct x 100  >=  conf_min
       2. home_odds >= home_odds_min  (filters heavy favourites)
-      3. o25_odds >= o25_floor       (aligned to S2 floor for same league;
-                                      skipped for non-EU leagues where no odds are available)
+      3. o25_odds >= o25_floor       (aligned to S2 floor for same league)
 
     Full lookback required — if either team hasn't played enough home/away
     games this season the signal returns None. No partial history fallback.
@@ -964,7 +840,6 @@ def check_signal3(df: pd.DataFrame, home: str, away: str,
             return None
 
     # ── Gate 3: O2.5 odds floor (aligned to S2 floor for this league) ─────────
-    # Non-EU leagues have o25_floor=None — no odds in data, skip check.
     o25_floor = p["o25_floor"]
     if o25_floor is not None:
         if o25_odds is not None and o25_odds < o25_floor:
@@ -1089,7 +964,6 @@ def format_telegram(results: list[dict],
         f"\n🕙 {scan_t} · {total} picks · {sel} selective{corr_note}\n"
         "_Tags: (S1) Leaky Home · (S2) Strong Away · (S3) BTTS Form_\n"
         "_(S3) on an S1/S2 pick = BTTS form also qualifies — added conviction_\n"
-        "_Non-EU: no odds in data — verify manually before betting_\n"
         "_/o25 rescan to refresh_"
     )
 
