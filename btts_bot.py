@@ -17,6 +17,14 @@ Combines two analysis engines in a single bot process:
       /o25               — next 24 hours
       /o25 YYYY-MM-DD    — specific date override
 
+  O2.5 long-back (S1 / S2 / S3, multi-season history) — manual only
+    Same signals and parameters as /o25, but history spans this season
+    plus the previous season, so signals can still fire early in a new
+    season before enough current-season games have been played.
+    Manual:
+      /o25lb             — next 24 hours
+      /o25lb YYYY-MM-DD  — specific date override
+
   Signal tags in O2.5 output:
     (S1)       Leaky Home signal triggered
     (S2)       Strong Away signal triggered
@@ -49,6 +57,7 @@ from btts_analysis import (
 # ── O2.5 engine ───────────────────────────────────────────────────────────────
 from o25_analysis import (
     run_analysis            as o25_run_analysis,
+    o25_lb,
     format_telegram         as o25_format_telegram,
     split_telegram_messages as o25_split_messages,
     parse_target_date       as o25_parse_date,
@@ -75,6 +84,9 @@ SCHEDULED_JOBS = [
 
 # How many days ahead the scheduled scan covers
 SCHEDULED_SCAN_DAYS = 4
+
+# How many seasons of history /o25lb pulls, most recent first
+O25_LB_SEASONS = 2
 
 MAX_RETRIES      = 3
 RETRY_DELAY_MINS = 15
@@ -312,6 +324,51 @@ async def cmd_o25(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(f"❌ O2.5 scan failed: {e}")
 
 
+async def cmd_o25lb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    /o25lb               -> next 24 hours, history spans O25_LB_SEASONS seasons
+    /o25lb YYYY-MM-DD    -> specific date override, same multi-season history
+
+    Same signals and output format as /o25 — the only difference is that
+    o25_lb() pulls history across multiple seasons instead of just the
+    current one, so it can still fire on teams with a short current-season
+    record. Reuses the same formatter/splitter as /o25.
+    """
+    args = context.args or []
+    first_arg = args[0].lower().strip() if args else ""
+
+    if first_arg and first_arg not in ("rescan",):
+        # Specific date override
+        target = o25_parse_date(first_arg)
+        day_name = DAY_NAMES[target.weekday()]
+        await update.message.reply_text(
+            f"⏳ Fetching O2.5 long-back data ({O25_LB_SEASONS} seasons) "
+            f"for {day_name} {target.strftime('%d %b %Y')}..."
+        )
+        try:
+            results = o25_lb(target_date=target, n_seasons=O25_LB_SEASONS)
+            message = o25_format_telegram(results, target_date=target)
+            await _send_long(context.bot, update.message.chat_id,
+                             message, o25_split_messages)
+        except Exception as e:
+            logger.error(f"O2.5 long-back analysis failed: {e}")
+            await update.message.reply_text(f"❌ O2.5 long-back analysis failed: {e}")
+        return
+
+    # Default: 24-hour rolling window
+    await update.message.reply_text(
+        f"⏳ Running O2.5 long-back scan ({O25_LB_SEASONS} seasons) — next 24 hours..."
+    )
+    try:
+        results = o25_lb(use_24h_window=True, n_seasons=O25_LB_SEASONS)
+        message = o25_format_telegram(results, use_24h_window=True)
+        await _send_long(context.bot, update.message.chat_id,
+                         message, o25_split_messages)
+    except Exception as e:
+        logger.error(f"O2.5 long-back scan failed: {e}")
+        await update.message.reply_text(f"❌ O2.5 long-back scan failed: {e}")
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Scheduled full scan (Tuesday 14:00 + Friday 18:00 London time)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -367,6 +424,9 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "`/o25` — next 24 hours of O2.5 picks\n"
         "`/o25 YYYY-MM-DD` — specific date override\n"
         "_Scheduled full scan: Tuesday 14:00 & Friday 18:00 (London time)_\n\n"
+        "*O2.5 Long-back* _(multi-season history)_\n"
+        "`/o25lb` — next 24 hours, using this + last season's data\n"
+        "`/o25lb YYYY-MM-DD` — specific date override\n\n"
         "*BTTS Signal* _(manual only)_\n"
         "`/btts` — today's BTTS picks\n"
         "`/btts tomorrow` — tomorrow's picks\n"
@@ -388,6 +448,12 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "  • Tuesday 14:00 — full 7-day fixture scan\n"
         "  • Friday 18:00  — full 7-day fixture scan\n"
         "_Both use London time and cover all configured leagues_\n\n"
+        f"*📈 O2.5 Long-back* _(history spans {O25_LB_SEASONS} seasons)_\n"
+        "`/o25lb` — next 24 hours of O2.5 picks, multi-season lookback\n"
+        "`/o25lb YYYY-MM-DD` — specific date override\n"
+        "_Same signals/thresholds as /o25 — just more history behind them, "
+        "useful early in a new season_\n"
+        "_Manual only — call on demand_\n\n"
         "*⚽ BTTS Signal*\n"
         "`/btts` — today's BTTS picks\n"
         "`/btts tomorrow` — tomorrow's picks\n"
@@ -427,6 +493,7 @@ def main() -> None:
     app.add_handler(CommandHandler("help",  cmd_help))
     app.add_handler(CommandHandler("btts",  cmd_btts))
     app.add_handler(CommandHandler("o25",   cmd_o25))
+    app.add_handler(CommandHandler("o25lb", cmd_o25lb))
 
     # ── Schedule Tuesday 14:00 and Friday 18:00 (London time) ─────────────────
     job_queue = app.job_queue
@@ -451,6 +518,7 @@ def main() -> None:
     logger.info("Sports Signals Bot started.")
     logger.info("BTTS: manual only (/btts)")
     logger.info("/o25: manual 24-hour window")
+    logger.info(f"/o25lb: manual 24-hour window, {O25_LB_SEASONS}-season lookback")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 

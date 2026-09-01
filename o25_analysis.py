@@ -74,6 +74,21 @@ def _derive_season() -> str:
 SEASON = _derive_season()
 
 
+def _season_span(n_seasons: int) -> list[str]:
+    """
+    Return the last n_seasons season codes, most recent first.
+    E.g. SEASON='2627', n_seasons=2 -> ['2627', '2526']
+    Used by o25_lb to pull history that spans multiple seasons.
+    """
+    start_year = int(SEASON[:2])
+    codes = []
+    for i in range(n_seasons):
+        y1 = start_year - i
+        y2 = y1 + 1
+        codes.append(f"{y1 % 100:02d}{y2 % 100:02d}")
+    return codes
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # League metadata
 # ─────────────────────────────────────────────────────────────────────────────
@@ -135,9 +150,9 @@ SIGNAL_PARAMS = {
     "E1": {
         "s1": None,
         "s2": {
-            "tier": "Selective", "lookback": 1,
-            "away_scored": 0.1, "away_overs": 0.1, "home_concedes": 0.1,
-            "odds_floor": 0.1,
+            "tier": "Selective", "lookback": 6,
+            "away_scored": 1.5, "away_overs": 0.75, "home_concedes": 1.5,
+            "odds_floor": 1.75,
         },
     },
 
@@ -275,17 +290,17 @@ S1_MIN_FLAGS = 3
 # ─────────────────────────────────────────────────────────────────────────────
 
 S3_PARAMS = {
-    "E0":  {"lookback": 6,  "conf_min": 55, "home_odds_min": 2.3,  "o25_floor": 1.80},
-    "E1":  {"lookback": 8,  "conf_min": 55, "home_odds_min": 2.3,  "o25_floor": 1.85},
-    "E2":  {"lookback": 6,  "conf_min": 55, "home_odds_min": 2.1,  "o25_floor": 1.85},
-    "E3":  {"lookback": 8,  "conf_min": 55, "home_odds_min": 2.3,  "o25_floor": 1.80},
-    "D1":  {"lookback": 6,  "conf_min": 55, "home_odds_min": 2.0,  "o25_floor": 1.65},
-    "D2":  {"lookback": 8,  "conf_min": 55, "home_odds_min": 2.3,  "o25_floor": 1.85},
+    "E0":  {"lookback": 6,  "conf_min": 50, "home_odds_min": 2.3,  "o25_floor": 1.80},
+    "E1":  {"lookback": 8,  "conf_min": 50, "home_odds_min": 2.3,  "o25_floor": 1.85},
+    "E2":  {"lookback": 6,  "conf_min": 50, "home_odds_min": 2.1,  "o25_floor": 1.85},
+    "E3":  {"lookback": 8,  "conf_min": 50, "home_odds_min": 2.3,  "o25_floor": 1.80},
+    "D1":  {"lookback": 6,  "conf_min": 50, "home_odds_min": 2.0,  "o25_floor": 1.65},
+    "D2":  {"lookback": 8,  "conf_min": 50, "home_odds_min": 2.3,  "o25_floor": 1.85},
     "F2":  {"lookback": 6,  "conf_min": 45, "home_odds_min": 2.3,  "o25_floor": 1.85},
-    "N1":  {"lookback": 6,  "conf_min": 55, "home_odds_min": 2.0,  "o25_floor": 1.80},
+    "N1":  {"lookback": 6,  "conf_min": 50, "home_odds_min": 2.0,  "o25_floor": 1.80},
     "I1":  {"lookback": 7,  "conf_min": 45, "home_odds_min": 2.3,  "o25_floor": 1.90},
     "SP1": {"lookback": 7,  "conf_min": 50, "home_odds_min": 2.3,  "o25_floor": 1.85},
-    "B1":  {"lookback": 8,  "conf_min": 55, "home_odds_min": 2.3,  "o25_floor": 1.85},
+    "B1":  {"lookback": 8,  "conf_min": 50, "home_odds_min": 2.3,  "o25_floor": 1.85},
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -295,8 +310,8 @@ S3_PARAMS = {
 FIXTURES_URL = "https://www.football-data.co.uk/fixtures.csv"
 
 
-def _history_url(code: str) -> str:
-    return f"https://www.football-data.co.uk/mmz4281/{SEASON}/{code}.csv"
+def _history_url(code: str, season: str = None) -> str:
+    return f"https://www.football-data.co.uk/mmz4281/{season or SEASON}/{code}.csv"
 
 
 # Home result odds — MaxH is best available across all tracked bookies
@@ -357,6 +372,39 @@ def download_history(code: str) -> pd.DataFrame:
     df["FTHG"] = pd.to_numeric(df["FTHG"], errors="coerce").fillna(0).astype(int)
     df["FTAG"] = pd.to_numeric(df["FTAG"], errors="coerce").fillna(0).astype(int)
     return df
+
+
+def download_history_span(code: str, n_seasons: int = 2) -> pd.DataFrame:
+    """
+    Download and concatenate completed results for a league across the last
+    n_seasons seasons (most recent first), for cross-season lookback (o25_lb).
+
+    Each season's file only contains games that division actually played that
+    season, so a team that was promoted or relegated simply won't appear in
+    the season(s) it wasn't in this division — no extra filtering needed.
+    """
+    frames = []
+    for season in _season_span(n_seasons):
+        url = _history_url(code, season)
+        try:
+            resp = requests.get(url, timeout=15)
+            resp.raise_for_status()
+            df = pd.read_csv(StringIO(resp.content.decode("utf-8-sig")))
+            df.columns = df.columns.str.strip()
+            frames.append(df)
+        except Exception as e:
+            print(f"  -> WARNING: {code} {season} history fetch failed ({e})")
+
+    if not frames:
+        raise RuntimeError(f"No history available for {code} across {n_seasons} seasons")
+
+    df = pd.concat(frames, ignore_index=True)
+    df = df.dropna(subset=["HomeTeam", "AwayTeam", "FTHG", "FTAG"])
+    df["Date"] = pd.to_datetime(df["Date"], dayfirst=True, errors="coerce")
+    df = df.dropna(subset=["Date"])
+    df["FTHG"] = pd.to_numeric(df["FTHG"], errors="coerce").fillna(0).astype(int)
+    df["FTAG"] = pd.to_numeric(df["FTAG"], errors="coerce").fillna(0).astype(int)
+    return df.sort_values("Date").reset_index(drop=True)
 
 
 def _extract_odds(row: pd.Series, cols: list) -> float | None:
@@ -626,33 +674,18 @@ def passes_odds_floor(o25_odds: float | None, sig: dict) -> tuple[bool, str]:
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Main analysis runner
+#
+# run_analysis() and o25_lb() share the same fixture-selection and signal
+# logic below — the only thing that differs between them is how league
+# history is loaded (single season vs. multi-season). That shared logic
+# lives in _select_day_fixtures(), _leagues_needed(), _load_history(), and
+# _analyze_fixtures().
 # ─────────────────────────────────────────────────────────────────────────────
 
-def run_analysis(target_date: date = None,
-                 use_24h_window: bool = False) -> list[dict]:
-    """
-    Run the O2.5 analysis.
-
-    Args:
-        target_date:     Analyse fixtures on this specific calendar date.
-        use_24h_window:  If True (used by the 8am scheduled job), analyse all
-                         fixtures in the next 24 hours.
-
-    Returns a list of qualifying fixture dicts, sorted:
-      S1 first, S2 second; Selective before Balanced/Volume; then by kick-off.
-    """
-    print(f"\nO2.5 Analysis — season {SEASON}")
-
-    # Download fixtures
-    print("  -> Fetching fixtures...", end=" ", flush=True)
-    try:
-        fixtures_df = download_fixtures()
-        print(f"{len(fixtures_df)} rows")
-    except Exception as e:
-        print(f"FAILED ({e})")
-        return []
-
-    # Select window
+def _select_day_fixtures(fixtures_df: pd.DataFrame,
+                         target_date: date = None,
+                         use_24h_window: bool = False) -> tuple[pd.DataFrame, str]:
+    """Pick the fixture window (24h rolling or a specific date) and label it."""
     if use_24h_window:
         now = datetime.now()
         end = now + timedelta(hours=24)
@@ -663,34 +696,43 @@ def run_analysis(target_date: date = None,
             target_date = date.today()
         day_fixtures = get_fixtures_for_date(fixtures_df, target_date)
         window_label = f"{DAY_NAMES[target_date.weekday()]} {target_date.strftime('%d %b %Y')}"
+    return day_fixtures, window_label
 
-    if day_fixtures.empty:
-        print(f"  -> No fixtures for {window_label}")
-        return []
 
-    print(f"  -> {len(day_fixtures)} fixtures · {window_label}")
-
-    # Load history for each league that has S1, S2, or S3 configured.
-    # S3-only leagues (e.g. F2) are included so standalone S3 picks can be
-    # evaluated even when S1/S2 are not active for that league.
-    leagues_needed = [
+def _leagues_needed(day_fixtures: pd.DataFrame) -> list[str]:
+    """
+    Leagues with S1, S2, or S3 configured that appear in this fixture window.
+    S3-only leagues (e.g. F2) are included so standalone S3 picks can be
+    evaluated even when S1/S2 are not active for that league.
+    """
+    return [
         c for c in day_fixtures["Div"].unique()
         if c in LEAGUE_META
         and (SIGNAL_PARAMS.get(c, {}).get("s1") is not None
              or SIGNAL_PARAMS.get(c, {}).get("s2") is not None
              or c in S3_PARAMS)
     ]
+
+
+def _load_history(leagues_needed: list[str], history_fn) -> dict:
+    """Load history for each needed league using the given loader function."""
     history = {}
     for code in leagues_needed:
         name = LEAGUE_META[code]["name"]
         print(f"  -> Loading {name}...", end=" ", flush=True)
         try:
-            history[code] = download_history(code)
+            history[code] = history_fn(code)
             print(f"{len(history[code])} results")
         except Exception as e:
             print(f"FAILED ({e})")
+    return history
 
-    # Analyse
+
+def _analyze_fixtures(day_fixtures: pd.DataFrame, history: dict) -> list[dict]:
+    """
+    Run S1/S2/S3 checks over every fixture in day_fixtures, using the given
+    per-league history dict. Returns a sorted list of qualifying picks.
+    """
     results = []
     skipped_odds = 0
 
@@ -785,6 +827,88 @@ def run_analysis(target_date: date = None,
         x["kickoff"],
     ))
     return results
+
+
+def run_analysis(target_date: date = None,
+                 use_24h_window: bool = False) -> list[dict]:
+    """
+    Run the O2.5 analysis using a single season of history.
+
+    Args:
+        target_date:     Analyse fixtures on this specific calendar date.
+        use_24h_window:  If True (used by the 8am scheduled job), analyse all
+                         fixtures in the next 24 hours.
+
+    Returns a list of qualifying fixture dicts, sorted:
+      S1 first, S2 second; Selective before Balanced/Volume; then by kick-off.
+    """
+    print(f"\nO2.5 Analysis — season {SEASON}")
+
+    print("  -> Fetching fixtures...", end=" ", flush=True)
+    try:
+        fixtures_df = download_fixtures()
+        print(f"{len(fixtures_df)} rows")
+    except Exception as e:
+        print(f"FAILED ({e})")
+        return []
+
+    day_fixtures, window_label = _select_day_fixtures(fixtures_df, target_date, use_24h_window)
+    if day_fixtures.empty:
+        print(f"  -> No fixtures for {window_label}")
+        return []
+    print(f"  -> {len(day_fixtures)} fixtures · {window_label}")
+
+    leagues_needed = _leagues_needed(day_fixtures)
+    history = _load_history(leagues_needed, download_history)
+
+    return _analyze_fixtures(day_fixtures, history)
+
+
+def o25_lb(target_date: date = None,
+          use_24h_window: bool = False,
+          n_seasons: int = 2) -> list[dict]:
+    """
+    Run the O2.5 analysis using history that spans multiple seasons
+    (this season plus the previous n_seasons - 1), instead of the
+    current-season-only history run_analysis() uses.
+
+    Same signals, same SIGNAL_PARAMS/S3_PARAMS, same fixture selection —
+    the only difference is the lookback window can reach back across a
+    season boundary, so signals can still fire early in a new season when
+    a team hasn't yet played enough current-season games.
+
+    Args:
+        target_date:     Analyse fixtures on this specific calendar date.
+        use_24h_window:  If True, analyse all fixtures in the next 24 hours.
+        n_seasons:       How many seasons of history to pull, most recent
+                         first (default 2 = this season + last season).
+
+    Returns a list of qualifying fixture dicts, sorted the same way as
+    run_analysis().
+    """
+    print(f"\nO2.5 Analysis (long-back, {n_seasons} seasons) — season {SEASON}")
+
+    print("  -> Fetching fixtures...", end=" ", flush=True)
+    try:
+        fixtures_df = download_fixtures()
+        print(f"{len(fixtures_df)} rows")
+    except Exception as e:
+        print(f"FAILED ({e})")
+        return []
+
+    day_fixtures, window_label = _select_day_fixtures(fixtures_df, target_date, use_24h_window)
+    if day_fixtures.empty:
+        print(f"  -> No fixtures for {window_label}")
+        return []
+    print(f"  -> {len(day_fixtures)} fixtures · {window_label}")
+
+    leagues_needed = _leagues_needed(day_fixtures)
+    history = _load_history(
+        leagues_needed,
+        lambda code: download_history_span(code, n_seasons),
+    )
+
+    return _analyze_fixtures(day_fixtures, history)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
